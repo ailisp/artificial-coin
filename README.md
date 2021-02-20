@@ -15,16 +15,16 @@ aGov token, aka "artificial Governance" token, is based on Lockable Fungible tok
 - User lock aGov token to mint aUSD token at same time, it's called "deposit_and_mint".
 - Amount of USD token mint is equal to 20% of the USD values of the aGov token.
 - aGov token have a deposit reward that is similar to the inflation rate as NEAR. Total deposit reward is `(total deposit + total undeposit) * inflation rate`. And reward distributed proportionally based on shared of deposit. Undeposited aGov would not receive deposit reward. Deposit reward is added to the undeposit balance and it's unlocked.
-- To withdraw deposit balance, user is required to burn aUSD token that's equivalent to the 20% of the USD values of the aGov token at the time of withdraw. This operation is called "burn_and_withdraw"
+- To withdraw deposit balance, user is required to burn aUSD token that's equivalent to the 20% of the USD values of the aGov token at the time of withdraw. This operation is called "burn_to_withdraw"
 
 ## aUSD Token
 
 aUSD token is the main stablecoin token that issued from this system.
 
 - User can freely use aUSD token (it's not locked) and transfer
-- Once user want to unlock the aGov token, 20% value of the aGov token of aUSD token must be burnt with "burn_and_withdraw"
+- Once user want to unlock the aGov token, 20% value of the aGov token of aUSD token must be burnt with "burn_to_withdraw"
 - There is no deposit reward for holding aUSD token, so for the holder it's an opportunity loss to not receiving staking reward of NEAR or deposit reward aGov, but the benefit is the stable 1:1 USD value
-- The aUSD's stable is implicitly guaranteed in this mint-deposit-burn-withdraw semantic. And also explictly as Yyou can always swap aUSD to aGov at price `1/x` if aGov is priced at `x` at this moment with `owner`. Owner will take your aUSD and issue you to your available balance. You must have zero deposit before the swap, otherwise you can always call burn_and_withdraw first. Reversely, you can also buy from owner aUSD by swap aGov
+- The aUSD's stable is implicitly guaranteed in this mint-deposit-burn-withdraw semantic. And also explictly as Yyou can always swap aUSD to aGov at price `1/x` if aGov is priced at `x` at this moment with `owner`. Owner will take your aUSD and issue you to your available balance. You must have zero deposit before the swap, otherwise you can always call burn_to_withdraw first. Reversely, you can also buy from owner aUSD by swap aGov
 - The rely on owner might seem centralized at first glance, but owner will be owned by multisignature account of all aGov holders in future. They'll also have avility to vote given the portion they owned for proposals of change 20%, upgrade contract, etc. That's why it's called governance token
 
 ## NEAR and aGov price oracle

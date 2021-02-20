@@ -257,6 +257,25 @@ impl FungibleToken {
         self.set_account(&account_id, &account);
         amount
     }
+
+    pub fn burn(&mut self, burn_amount: u128) -> u128 {
+        assert!(
+            env::predecessor_account_id() == self.agov_token,
+            "Only allow mint originated from governance token"
+        );
+        if burn_amount == 0 {
+            env::panic(b"Can't burn 0 tokens");
+        }
+        let account_id = env::signer_account_id();
+        let mut account = self.get_account(&account_id);
+        if account.balance < burn_amount {
+            env::panic(b"Not enough balance to burn");
+        }
+        account.balance -= burn_amount;
+        self.total_supply -= burn_amount;
+        self.set_account(&account_id, &account);
+        burn_amount
+    }
 }
 
 impl FungibleToken {

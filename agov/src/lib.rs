@@ -48,9 +48,15 @@ impl Account {
     }
 }
 
-#[ext_contract(ext)]
+#[ext_contract(ext_usd)]
 pub trait ExtAUSDContract {
     fn mint(&mut self, amount: u128) -> u128;
+    fn burn(&mut self, amount: u128);
+}
+
+#[ext_contract(ext_gov)]
+pub trait ExtAGovContract {
+    fn unlock(&mut self, owner_id: AccountId, unlock_amount: u128) -> u128;
 }
 
 #[near_bindgen]
@@ -67,6 +73,9 @@ pub struct FunToken {
 
     /// Owner ID
     pub owner: AccountId,
+
+    /// USD token, only allow unlock originate from which
+    pub ausd_token: AccountId,
 }
 
 impl Default for FunToken {
@@ -78,13 +87,14 @@ impl Default for FunToken {
 #[near_bindgen]
 impl FunToken {
     #[init]
-    pub fn new(owner_id: AccountId, total_supply: String) -> Self {
+    pub fn new(owner_id: AccountId, total_supply: String, ausd_token: AccountId) -> Self {
         let total_supply = u128::from_str(&total_supply).expect("Failed to parse total supply");
         let mut ft = Self {
             accounts: UnorderedMap::new(b"a".to_vec()),
             total_supply,
             price: 0,
             owner: owner_id.clone(),
+            ausd_token,
         };
         let mut account = ft.get_account(&owner_id);
         account.balance = total_supply;
@@ -120,7 +130,6 @@ impl FunToken {
         self.price = price;
     }
 
-    #[result_serializer(borsh)]
     pub fn deposit_and_mint(&mut self, owner_id: AccountId, deposit: String) -> Promise {
         if self.price == 0 {
             // Not received any data from oracle
@@ -128,7 +137,24 @@ impl FunToken {
         }
         let lock_amount = self.lock(owner_id.clone(), deposit);
         let mint_amount = lock_amount / self.price / 5;
-        ext::mint(mint_amount, &owner_id, 0, env::prepaid_gas())
+        ext_usd::mint(mint_amount, &owner_id, 0, env::prepaid_gas())
+    }
+
+    pub fn burn_to_withdraw(&mut self, owner_id: AccountId, withdraw_amount: String) -> Promise {
+        if self.price == 0 {
+            // Not received any data from oracle
+            env::panic(b"No price data from oracle");
+        }
+        let withdraw_amount =
+            u128::from_str(&withdraw_amount).expect("Failed to parse withdraw_amount");
+        let burn_amount = withdraw_amount / self.price / 5;
+        ext_usd::burn(burn_amount, &owner_id, 0, env::prepaid_gas()).then(ext_gov::unlock(
+            owner_id.clone(),
+            withdraw_amount,
+            &owner_id,
+            0,
+            env::prepaid_gas(),
+        ))
     }
 
     /// Locks an additional `lock_amount` to the caller of the function (`predecessor_id`) from
@@ -137,7 +163,7 @@ impl FunToken {
     /// * The (`predecessor_id`) should have enough allowance or be the owner.
     /// * The owner should have enough unlocked balance.
     fn lock(&mut self, owner_id: AccountId, lock_amount: String) -> u128 {
-        let lock_amount = u128::from_str(&lock_amount).expect("Failed to parse allow lock_amount");
+        let lock_amount = u128::from_str(&lock_amount).expect("Failed to parse lock_amount");
         if lock_amount == 0 {
             env::panic(b"Can't lock 0 tokens");
         }
@@ -172,9 +198,11 @@ impl FunToken {
     /// If called not by the `owner_id` then the `unlock_amount` will be converted to the allowance.
     /// Requirements:
     /// * The (`predecessor_id`) should have at least `unlock_amount` locked tokens from `owner_id`.
-    pub fn unlock(&mut self, owner_id: AccountId, unlock_amount: String) {
-        let unlock_amount =
-            u128::from_str(&unlock_amount).expect("Failed to parse allow unlock_amount");
+    pub fn unlock(&mut self, owner_id: AccountId, unlock_amount: u128) {
+        assert!(
+            env::predecessor_account_id() == self.ausd_token,
+            "Only allow unlock originated from usd token after a burn"
+        );
         if unlock_amount == 0 {
             env::panic(b"Can't unlock 0 tokens");
         }
