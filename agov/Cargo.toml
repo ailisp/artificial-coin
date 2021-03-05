@@ -1,5 +1,5 @@
 [package]
-name = "lockable-fungible-token"
+name = "agov"
 version = "0.1.0"
 authors = ["Near Inc <hello@nearprotocol.com>"]
 edition = "2018"
@@ -9,6 +9,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev="4f0cf78d80dfd7388e6e456f7e889ebcd1afdab0" }
+
+[dev-dependencies]
+near-sdk-sim = { git = "https://github.com/near/near-sdk-rs.git", rev="4f0cf78d80dfd7388e6e456f7e889ebcd1afdab0" }
+ausd = { path = "../ausd" }
 
 [profile.release]
 codegen-units = 1

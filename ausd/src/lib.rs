@@ -20,6 +20,7 @@ use near_sdk::collections::LookupMap;
 use near_sdk::json_types::U128;
 use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage};
 
+#[cfg(target_arch = "wasm32")]
 #[global_allocator]
 static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
 
@@ -42,11 +43,7 @@ pub struct Account {
 impl Account {
     /// Initializes a new Account with 0 balance and no allowances for a given `account_hash`.
     pub fn new(account_hash: Vec<u8>) -> Self {
-        Self {
-            balance: 0,
-            allowances: LookupMap::new(account_hash),
-            num_allowances: 0,
-        }
+        Self { balance: 0, allowances: LookupMap::new(account_hash), num_allowances: 0 }
     }
 
     /// Sets allowance for account `escrow_account_id` to `allowance`.
@@ -72,7 +69,7 @@ impl Account {
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
-pub struct FungibleToken {
+pub struct AUSD {
     /// sha256(AccountID) -> Account details.
     pub accounts: LookupMap<Vec<u8>, Account>,
 
@@ -84,17 +81,13 @@ pub struct FungibleToken {
 }
 
 #[near_bindgen]
-impl FungibleToken {
+impl AUSD {
     /// Initializes the contract with the given total supply owned by the given `owner_id`.
     #[init]
     pub fn new(owner_id: AccountId, total_supply: U128, agov_token: AccountId) -> Self {
         let total_supply = total_supply.into();
         assert!(!env::state_exists(), "Already initialized");
-        let mut ft = Self {
-            accounts: LookupMap::new(b"a".to_vec()),
-            total_supply,
-            agov_token,
-        };
+        let mut ft = Self { accounts: LookupMap::new(b"a".to_vec()), total_supply, agov_token };
         let mut account = ft.get_account(&owner_id);
         account.balance = total_supply;
         ft.set_account(&owner_id, &account);
@@ -119,10 +112,7 @@ impl FungibleToken {
         }
         let mut account = self.get_account(&owner_id);
         let current_allowance = account.get_allowance(&escrow_account_id);
-        account.set_allowance(
-            &escrow_account_id,
-            current_allowance.saturating_add(amount.0),
-        );
+        account.set_allowance(&escrow_account_id, current_allowance.saturating_add(amount.0));
         self.set_account(&owner_id, &account);
         self.refund_storage(initial_storage);
     }
@@ -145,10 +135,7 @@ impl FungibleToken {
         }
         let mut account = self.get_account(&owner_id);
         let current_allowance = account.get_allowance(&escrow_account_id);
-        account.set_allowance(
-            &escrow_account_id,
-            current_allowance.saturating_sub(amount.0),
-        );
+        account.set_allowance(&escrow_account_id, current_allowance.saturating_sub(amount.0));
         self.set_account(&owner_id, &account);
         self.refund_storage(initial_storage);
     }
@@ -240,9 +227,7 @@ impl FungibleToken {
             env::is_valid_account_id(escrow_account_id.as_bytes()),
             "Escrow account ID is invalid"
         );
-        self.get_account(&owner_id)
-            .get_allowance(&escrow_account_id)
-            .into()
+        self.get_account(&owner_id).get_allowance(&escrow_account_id).into()
     }
 
     pub fn mint(&mut self, amount: u128) -> u128 {
@@ -278,17 +263,12 @@ impl FungibleToken {
     }
 }
 
-impl FungibleToken {
+impl AUSD {
     /// Helper method to get the account details for `owner_id`.
     fn get_account(&self, owner_id: &AccountId) -> Account {
-        assert!(
-            env::is_valid_account_id(owner_id.as_bytes()),
-            "Owner's account ID is invalid"
-        );
+        assert!(env::is_valid_account_id(owner_id.as_bytes()), "Owner's account ID is invalid");
         let account_hash = env::sha256(owner_id.as_bytes());
-        self.accounts
-            .get(&account_hash)
-            .unwrap_or_else(|| Account::new(account_hash))
+        self.accounts.get(&account_hash).unwrap_or_else(|| Account::new(account_hash))
     }
 
     /// Helper method to set the account details for `owner_id` to the state.
@@ -368,7 +348,7 @@ mod tests {
         let context = get_context(carol());
         testing_env!(context);
         let total_supply = 1_000_000_000_000_000u128;
-        let contract = FungibleToken::new(bob(), total_supply.into());
+        let contract = AUSD::new(bob(), total_supply.into(), "agov".to_string());
         assert_eq!(contract.get_total_supply().0, total_supply);
         assert_eq!(contract.get_balance(bob()).0, total_supply);
     }
@@ -378,7 +358,7 @@ mod tests {
     fn test_default() {
         let context = get_context(carol());
         testing_env!(context);
-        let _contract = FungibleToken::default();
+        let _contract = AUSD::default();
     }
 
     #[test]
@@ -386,7 +366,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.storage_usage = env::storage_usage();
 
         context.attached_deposit = 1000 * STORAGE_PRICE_PER_BYTE;
@@ -399,10 +379,7 @@ mod tests {
         context.is_view = true;
         context.attached_deposit = 0;
         testing_env!(context.clone());
-        assert_eq!(
-            contract.get_balance(carol()).0,
-            (total_supply - transfer_amount)
-        );
+        assert_eq!(contract.get_balance(carol()).0, (total_supply - transfer_amount));
         assert_eq!(contract.get_balance(bob()).0, transfer_amount);
     }
 
@@ -412,7 +389,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.storage_usage = env::storage_usage();
 
         context.attached_deposit = 1000 * STORAGE_PRICE_PER_BYTE;
@@ -427,7 +404,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.attached_deposit = STORAGE_PRICE_PER_BYTE * 1000;
         testing_env!(context.clone());
         contract.inc_allowance(carol(), (total_supply / 2).into());
@@ -439,7 +416,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.attached_deposit = STORAGE_PRICE_PER_BYTE * 1000;
         testing_env!(context.clone());
         contract.dec_allowance(carol(), (total_supply / 2).into());
@@ -450,7 +427,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.attached_deposit = STORAGE_PRICE_PER_BYTE * 1000;
         testing_env!(context.clone());
         contract.dec_allowance(bob(), (total_supply / 2).into());
@@ -462,15 +439,12 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = std::u128::MAX;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.attached_deposit = STORAGE_PRICE_PER_BYTE * 1000;
         testing_env!(context.clone());
         contract.inc_allowance(bob(), total_supply.into());
         contract.inc_allowance(bob(), total_supply.into());
-        assert_eq!(
-            contract.get_allowance(carol(), bob()),
-            std::u128::MAX.into()
-        )
+        assert_eq!(contract.get_allowance(carol(), bob()), std::u128::MAX.into())
     }
 
     #[test]
@@ -481,7 +455,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.attached_deposit = 0;
         testing_env!(context.clone());
         contract.inc_allowance(bob(), (total_supply / 2).into());
@@ -493,7 +467,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.storage_usage = env::storage_usage();
 
         context.is_view = true;
@@ -526,15 +500,9 @@ mod tests {
         context.is_view = true;
         context.attached_deposit = 0;
         testing_env!(context.clone());
-        assert_eq!(
-            contract.get_balance(carol()).0,
-            total_supply - transfer_amount
-        );
+        assert_eq!(contract.get_balance(carol()).0, total_supply - transfer_amount);
         assert_eq!(contract.get_balance(alice()).0, transfer_amount);
-        assert_eq!(
-            contract.get_allowance(carol(), bob()).0,
-            allowance - transfer_amount
-        );
+        assert_eq!(contract.get_allowance(carol(), bob()).0, allowance - transfer_amount);
     }
 
     #[test]
@@ -543,7 +511,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.storage_usage = env::storage_usage();
 
         context.is_view = true;
@@ -577,15 +545,9 @@ mod tests {
         context.is_view = true;
         context.attached_deposit = 0;
         testing_env!(context.clone());
-        assert_eq!(
-            contract.get_balance(carol()).0,
-            (total_supply - transfer_amount)
-        );
+        assert_eq!(contract.get_balance(carol()).0, (total_supply - transfer_amount));
         assert_eq!(contract.get_balance(alice()).0, transfer_amount);
-        assert_eq!(
-            contract.get_allowance(carol(), bob()).0,
-            allowance - transfer_amount
-        );
+        assert_eq!(contract.get_allowance(carol(), bob()).0, allowance - transfer_amount);
     }
 
     #[test]
@@ -593,7 +555,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = FungibleToken::new(carol(), total_supply.into());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
         context.storage_usage = env::storage_usage();
 
         let initial_balance = context.account_balance;

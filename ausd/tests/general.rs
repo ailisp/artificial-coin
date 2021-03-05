@@ -5,9 +5,9 @@ use near_sdk_sim::{
 use std::str::FromStr;
 
 /// Bring contract crate into namespace
-extern crate fungible_token;
+extern crate ausd;
 /// Import the generated proxy contract
-use fungible_token::FungibleTokenContract;
+use ausd::AUSDContract;
 use near_sdk::json_types::U128;
 use near_sdk_sim::account::AccessKey;
 
@@ -16,14 +16,12 @@ near_sdk_sim::lazy_static! {
     static ref TOKEN_WASM_BYTES: &'static [u8] = include_bytes!("../res/fungible_token.wasm").as_ref();
 }
 
-fn init(
-    initial_balance: u128,
-) -> (UserAccount, ContractAccount<FungibleTokenContract>, UserAccount) {
+fn init(initial_balance: u128) -> (UserAccount, ContractAccount<AUSDContract>, UserAccount) {
     let master_account = init_simulator(None);
     // uses default values for deposit and gas
     let contract_user = deploy!(
         // Contract Proxy
-        contract: FungibleTokenContract,
+        contract: AUSDContract,
         // Contract account id
         contract_id: "contract",
         // Bytes of contract
@@ -31,7 +29,7 @@ fn init(
         // User deploying the contract,
         signer_account: master_account,
         // init method
-        init_method: new(master_account.account_id(), initial_balance.into())
+        init_method: new(master_account.account_id(), initial_balance.into(), "agov".to_string())
     );
     let alice = master_account.create_user("alice".to_string(), to_yocto("100"));
     (master_account, contract_user, alice)
