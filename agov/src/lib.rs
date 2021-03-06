@@ -1,6 +1,6 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
-use near_sdk::{env, ext_contract, near_bindgen, AccountId, Balance, Promise};
+use near_sdk::{env, ext_contract, log, near_bindgen, AccountId, Balance, Promise};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -65,10 +65,10 @@ pub struct AGov {
     /// AccountID -> Account details.
     pub accounts: UnorderedMap<AccountId, Account>,
 
-    /// Total supply of the all token.
+    /// Total supply of the all token, in yocto
     pub total_supply: Balance,
 
-    /// Current price, each aGov in USD cents, submitted by oracle
+    /// Current price, each 10^8 aGov in USD
     pub price: u128,
 
     /// Owner ID
@@ -122,10 +122,11 @@ impl AGov {
         self.accounts.insert(&owner_id, &account);
     }
 
-    pub fn submit_price(&mut self, price: u128) {
+    pub fn submit_price(&mut self, price: String) {
         if env::predecessor_account_id() != self.owner {
             env::panic(b"Only owner can submit price data");
         }
+        let price = u128::from_str(&price).expect("Failed to parse price");
         // we completely trust owner for now
         self.price = price;
     }
@@ -136,8 +137,10 @@ impl AGov {
             env::panic(b"No price data from oracle");
         }
         let lock_amount = self.lock(owner_id.clone(), deposit);
-        let mint_amount = lock_amount / self.price / 5;
-        ext_usd::mint(mint_amount, &owner_id, 0, env::prepaid_gas())
+        let mint_amount = (lock_amount / 10u128.pow(24) * self.price / 100_000_000 / 5)
+            .checked_mul(10u128.pow(24))
+            .unwrap();
+        ext_usd::mint(mint_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
     }
 
     pub fn burn_to_withdraw(&mut self, owner_id: AccountId, withdraw_amount: String) -> Promise {
@@ -147,7 +150,7 @@ impl AGov {
         }
         let withdraw_amount =
             u128::from_str(&withdraw_amount).expect("Failed to parse withdraw_amount");
-        let burn_amount = withdraw_amount / self.price / 5;
+        let burn_amount = withdraw_amount * self.price / 5;
         ext_usd::burn(burn_amount, &owner_id, 0, env::prepaid_gas()).then(ext_gov::unlock(
             owner_id.clone(),
             withdraw_amount,

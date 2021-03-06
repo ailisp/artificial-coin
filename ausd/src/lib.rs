@@ -237,8 +237,11 @@ impl AUSD {
         );
         let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
+        // env::log(&amount.to_string().as_bytes());
         account.balance += amount;
         self.total_supply += amount;
+        env::log(&self.total_supply.to_string().as_bytes());
+
         self.set_account(&account_id, &account);
         amount
     }
