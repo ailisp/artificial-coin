@@ -45,7 +45,6 @@ fn init() -> (UserAccount, ContractAccount<AGovContract>, ContractAccount<AUSDCo
 #[test]
 fn test_initial_issue() {
     let (master_account, agov, ausd) = init();
-    let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
     let deposit_amount = (to_yocto(INIT_AGOV_BALANCE) / 2).to_string();
     call!(
         master_account,
@@ -71,4 +70,29 @@ fn test_initial_issue() {
     ))
     .unwrap_json();
     assert_eq!(master_locked_agov_balance, (to_yocto(INIT_AGOV_BALANCE) / 2).to_string());
+}
+
+#[test]
+fn test_transfer_agov() {
+    let (master_account, agov, ausd) = init();
+    let deposit_amount = (to_yocto(INIT_AGOV_BALANCE) / 2).to_string();
+    call!(
+        master_account,
+        agov.submit_price("2000000000".to_string()), // every agov is $20
+        gas = DEFAULT_GAS * 4
+    )
+    .assert_success();
+    call!(master_account, agov.deposit_and_mint(master_account.account_id(), deposit_amount))
+        .assert_success();
+
+    let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
+    call!(master_account, agov.transfer(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+    let master_unlocked_agov_balance: String =
+        view!(agov.get_unlocked_balance(master_account.account_id().try_into().unwrap()))
+            .unwrap_json();
+    assert_eq!(
+        master_unlocked_agov_balance,
+        (to_yocto(INIT_AGOV_BALANCE) / 2 - to_yocto("10000")).to_string()
+    );
 }

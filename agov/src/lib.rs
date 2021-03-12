@@ -231,15 +231,10 @@ impl AGov {
         self.accounts.insert(&owner_id, &account);
     }
 
-    /// Transfers the `amount` of tokens from `owner_id` to the `new_owner_id`.
-    /// First uses locked tokens by the caller of the function (`predecessor_id`). If the amount
-    /// of locked tokens is not enough to cover the full amount, then uses unlocked tokens
-    /// for the remaining balance.
+    /// Transfers unlocked `amount` of tokens from `owner_id` to the `new_owner_id`.
     /// Requirements:
-    /// * The caller of the function (`predecessor_id`) should have at least `amount` of locked plus
-    /// allowance tokens.
-    /// * The balance owner should have at least `amount` of locked (by `predecessor_id`) plus
-    /// unlocked tokens.
+    /// * The caller of the function (`predecessor_id`) should have at least `amount` of allowance tokens.
+    /// * The balance owner should have at least `amount` of unlocked (by `predecessor_id`) tokens
     pub fn transfer_from(&mut self, owner_id: AccountId, new_owner_id: AccountId, amount: String) {
         let amount = u128::from_str(&amount).expect("Failed to parse allow amount");
         if amount == 0 {
@@ -248,33 +243,20 @@ impl AGov {
         let escrow_account_id = env::predecessor_account_id();
         let mut account = self.get_account(&owner_id);
 
-        // Checking and updating locked balance
-        let locked_balance = account.get_locked_balance(&escrow_account_id);
-        let remaining_amount = if locked_balance >= amount {
-            account.set_locked_balance(&escrow_account_id, locked_balance - amount);
-            0
-        } else {
-            account.set_locked_balance(&escrow_account_id, 0);
-            amount - locked_balance
-        };
+        // Checking and updating unlocked balance
+        if account.balance < amount {
+            env::panic(b"Not enough unlocked balance");
+        }
+        account.balance -= amount;
 
-        // If there is remaining balance after the locked balance, we try to use unlocked tokens.
-        if remaining_amount > 0 {
+        // If transferring by escrow, need to check and update allowance.
+        if escrow_account_id != owner_id {
+            let allowance = account.get_allowance(&escrow_account_id);
             // Checking and updating unlocked balance
-            if account.balance < remaining_amount {
-                env::panic(b"Not enough unlocked balance");
+            if allowance < amount {
+                env::panic(b"Not enough allowance");
             }
-            account.balance -= remaining_amount;
-
-            // If transferring by escrow, need to check and update allowance.
-            if escrow_account_id != owner_id {
-                let allowance = account.get_allowance(&escrow_account_id);
-                // Checking and updating unlocked balance
-                if allowance < remaining_amount {
-                    env::panic(b"Not enough allowance");
-                }
-                account.set_allowance(&escrow_account_id, allowance - remaining_amount);
-            }
+            account.set_allowance(&escrow_account_id, allowance - amount);
         }
 
         self.accounts.insert(&owner_id, &account);
