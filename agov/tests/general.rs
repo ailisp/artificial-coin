@@ -214,3 +214,54 @@ fn test_burn_withdraw() {
     .unwrap_json();
     assert_eq!(alice_locked_agov_balance, (to_yocto("0")).to_string());
 }
+
+#[test]
+fn test_withdraw_when_price_change() {
+    let (master_account, agov, ausd) = init();
+    let deposit_amount = (to_yocto(INIT_AGOV_BALANCE) / 2).to_string();
+    call!(
+        master_account,
+        agov.submit_price("2000000000".to_string()), // every agov is $20
+        gas = DEFAULT_GAS * 4
+    )
+    .assert_success();
+    call!(master_account, agov.deposit_and_mint(master_account.account_id(), deposit_amount))
+        .assert_success();
+
+    let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
+    call!(master_account, agov.transfer(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+
+    call!(alice, agov.deposit_and_mint(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+
+    // price of agov rise, ausd/agov falls, but it doesn't affect alice because no new player comes in
+    // system minted / system deposited remains equal
+
+    call!(
+        master_account,
+        agov.submit_price("4000000000".to_string()), // every agov is now $40
+        gas = DEFAULT_GAS * 4
+    )
+    .assert_success();
+
+    call!(alice, agov.burn_to_withdraw(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+
+    // alice redeposit her agov, now she can mint doubled amount of ausd
+    call!(alice, agov.deposit_and_mint(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+    let alice_ausd_balance: U128 =
+        view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(U128(to_yocto("10000") * 40 / 5), alice_ausd_balance);
+
+    // now price goes down
+    call!(
+        master_account,
+        agov.submit_price("2000000000".to_string()), // every agov is $20
+        gas = DEFAULT_GAS * 4
+    )
+    .assert_success();
+
+    // now bob deposit and mint
+}
