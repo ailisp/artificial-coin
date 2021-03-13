@@ -95,4 +95,122 @@ fn test_transfer_agov() {
         master_unlocked_agov_balance,
         (to_yocto(INIT_AGOV_BALANCE) / 2 - to_yocto("10000")).to_string()
     );
+    let master_locked_agov_balance: String = view!(agov.get_locked_balance(
+        master_account.account_id().try_into().unwrap(),
+        master_account.account_id().try_into().unwrap()
+    ))
+    .unwrap_json();
+    assert_eq!(master_locked_agov_balance, (to_yocto(INIT_AGOV_BALANCE) / 2).to_string());
+
+    let alice_unlocked_agov_balance: String =
+        view!(agov.get_unlocked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(alice_unlocked_agov_balance, to_yocto("10000").to_string());
+
+    let alice_locked_agov_balance: String = view!(agov.get_locked_balance(
+        alice.account_id().try_into().unwrap(),
+        alice.account_id().try_into().unwrap()
+    ))
+    .unwrap_json();
+    assert_eq!(alice_locked_agov_balance, (to_yocto("0")).to_string());
+
+    let bob = master_account.create_user("bob".to_string(), to_yocto("10"));
+    call!(alice, agov.transfer(bob.account_id(), to_yocto("1000").to_string())).assert_success();
+
+    let alice_unlocked_agov_balance: String =
+        view!(agov.get_unlocked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(alice_unlocked_agov_balance, to_yocto("9000").to_string());
+
+    let bob_unlocked_agov_balance: String =
+        view!(agov.get_unlocked_balance(bob.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(bob_unlocked_agov_balance, to_yocto("1000").to_string());
+}
+
+#[test]
+fn test_mint_ausd() {
+    let (master_account, agov, ausd) = init();
+    let deposit_amount = (to_yocto(INIT_AGOV_BALANCE) / 2).to_string();
+    call!(
+        master_account,
+        agov.submit_price("2000000000".to_string()), // every agov is $20
+        gas = DEFAULT_GAS * 4
+    )
+    .assert_success();
+    call!(master_account, agov.deposit_and_mint(master_account.account_id(), deposit_amount))
+        .assert_success();
+
+    let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
+    call!(master_account, agov.transfer(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+
+    let res =
+        call!(alice, agov.deposit_and_mint(alice.account_id(), to_yocto("10000").to_string()));
+    assert!(res.is_ok());
+    let total_supply: U128 = view!(ausd.get_total_supply()).unwrap_json();
+    assert_eq!(total_supply.0, ((to_yocto(INIT_AGOV_BALANCE) / 2 + to_yocto("10000")) * 20 / 5));
+
+    let alice_ausd_balance: U128 =
+        view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(U128(to_yocto("10000") * 20 / 5), alice_ausd_balance);
+    let alice_unlocked_agov_balance: String =
+        view!(agov.get_unlocked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(alice_unlocked_agov_balance, (to_yocto("0")).to_string());
+    let alice_locked_agov_balance: String = view!(agov.get_locked_balance(
+        alice.account_id().try_into().unwrap(),
+        alice.account_id().try_into().unwrap()
+    ))
+    .unwrap_json();
+    assert_eq!(alice_locked_agov_balance, (to_yocto("10000")).to_string());
+
+    let bob = master_account.create_user("bob".to_string(), to_yocto("10"));
+    assert!(!call!(alice, agov.transfer(bob.account_id(), to_yocto("1000").to_string())).is_ok());
+
+    // Alice can use her ausd freely
+    call!(
+        alice,
+        ausd.transfer(bob.account_id(), U128(to_yocto("30000"))),
+        deposit = STORAGE_AMOUNT / 10
+    )
+    .assert_success();
+    let alice_ausd_balance: U128 =
+        view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(U128(to_yocto("10000") * 20 / 5 - to_yocto("30000")), alice_ausd_balance);
+    let bob_ausd_balance: U128 =
+        view!(ausd.get_balance(bob.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(U128(to_yocto("30000")), bob_ausd_balance);
+}
+
+#[test]
+fn test_burn_withdraw() {
+    let (master_account, agov, ausd) = init();
+    let deposit_amount = (to_yocto(INIT_AGOV_BALANCE) / 2).to_string();
+    call!(
+        master_account,
+        agov.submit_price("2000000000".to_string()), // every agov is $20
+        gas = DEFAULT_GAS * 4
+    )
+    .assert_success();
+    call!(master_account, agov.deposit_and_mint(master_account.account_id(), deposit_amount))
+        .assert_success();
+
+    let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
+    call!(master_account, agov.transfer(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+
+    call!(alice, agov.deposit_and_mint(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+    call!(alice, agov.burn_to_withdraw(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+
+    let alice_ausd_balance: U128 =
+        view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(U128(to_yocto("0")), alice_ausd_balance);
+    let alice_unlocked_agov_balance: String =
+        view!(agov.get_unlocked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(alice_unlocked_agov_balance, (to_yocto("10000")).to_string());
+    let alice_locked_agov_balance: String = view!(agov.get_locked_balance(
+        alice.account_id().try_into().unwrap(),
+        alice.account_id().try_into().unwrap()
+    ))
+    .unwrap_json();
+    assert_eq!(alice_locked_agov_balance, (to_yocto("0")).to_string());
 }

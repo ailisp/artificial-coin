@@ -51,7 +51,8 @@ impl Account {
 #[ext_contract(ext_usd)]
 pub trait ExtAUSDContract {
     fn mint(&mut self, amount: u128) -> u128;
-    fn burn(&mut self, amount: u128);
+    fn burn(&mut self, agov_amount: u128, agov_total_locked: u128) -> u128;
+    fn get_total_supply(&self) -> U128;
 }
 
 #[ext_contract(ext_gov)]
@@ -76,6 +77,9 @@ pub struct AGov {
 
     /// USD token, only allow unlock originate from which
     pub ausd_token: AccountId,
+
+    /// Total locked balance
+    pub total_locked: Balance,
 }
 
 impl Default for AGov {
@@ -95,6 +99,7 @@ impl AGov {
             price: 0,
             owner: owner_id.clone(),
             ausd_token,
+            total_locked: 0,
         };
         let mut account = ft.get_account(&owner_id);
         account.balance = total_supply;
@@ -150,13 +155,21 @@ impl AGov {
         }
         let withdraw_amount =
             u128::from_str(&withdraw_amount).expect("Failed to parse withdraw_amount");
-        let burn_amount = withdraw_amount * self.price / 5;
-        ext_usd::burn(burn_amount, &owner_id, 0, env::prepaid_gas()).then(ext_gov::unlock(
-            owner_id.clone(),
+        // burn_amount is  withdraw_amount * (self.price / 100000000) * (ext_usd::get_total_supply() / (self.total_locked * (self.price / 10000000)))
+        // = withdraw_amount * usd_total_supply / self.total_locked
+        ext_usd::burn(
             withdraw_amount,
-            &owner_id,
+            self.total_locked,
+            &self.ausd_token,
             0,
-            env::prepaid_gas(),
+            env::prepaid_gas() / 3,
+        )
+        .then(ext_gov::unlock(
+            owner_id,
+            withdraw_amount,
+            &env::current_account_id(),
+            0,
+            env::prepaid_gas() / 3,
         ))
     }
 
@@ -191,42 +204,30 @@ impl AGov {
         // Updating total lock balance
         let locked_balance = account.get_locked_balance(&escrow_account_id);
         account.set_locked_balance(&escrow_account_id, locked_balance + lock_amount);
+        self.total_locked += lock_amount;
 
         self.accounts.insert(&owner_id, &account);
         lock_amount
     }
 
-    /// Unlocks the `unlock_amount` from the caller of the function (`predecessor_id`) back to
-    /// the `owner_id`.
-    /// If called not by the `owner_id` then the `unlock_amount` will be converted to the allowance.
-    /// Requirements:
-    /// * The (`predecessor_id`) should have at least `unlock_amount` locked tokens from `owner_id`.
+    /// Unlocks the `unlock_amount` from the owner
+    #[private]
     pub fn unlock(&mut self, owner_id: AccountId, unlock_amount: u128) {
-        assert!(
-            env::predecessor_account_id() == self.ausd_token,
-            "Only allow unlock originated from usd token after a burn"
-        );
         if unlock_amount == 0 {
             env::panic(b"Can't unlock 0 tokens");
         }
-        let escrow_account_id = env::predecessor_account_id();
         let mut account = self.get_account(&owner_id);
 
         // Checking and updating locked balance
-        let locked_balance = account.get_locked_balance(&escrow_account_id);
+        let locked_balance = account.get_locked_balance(&owner_id);
         if locked_balance < unlock_amount {
             env::panic(b"Not enough locked tokens");
         }
-        account.set_locked_balance(&escrow_account_id, locked_balance - unlock_amount);
-
-        // If unlocking by escrow, need to update allowance.
-        if escrow_account_id != owner_id {
-            let allowance = account.get_allowance(&escrow_account_id);
-            account.set_allowance(&escrow_account_id, allowance + unlock_amount);
-        }
+        account.set_locked_balance(&owner_id, locked_balance - unlock_amount);
 
         // Updating unlocked balance
         account.balance += unlock_amount;
+        self.total_locked -= unlock_amount;
 
         self.accounts.insert(&owner_id, &account);
     }
