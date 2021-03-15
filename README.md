@@ -11,20 +11,20 @@ aUSD stablecoin, aka "artificial US Dollars", is a decentralized stablecoin prot
 
 aGov token, aka "artificial Governance" token, is based on Lockable Fungible token. But locking mechanism is changed:
 
-- Locking must be initiated from the aUSD Token contract, and it's called "deposit".
-- User lock aGov token to mint aUSD token at same time, it's called "deposit_and_mint".
+- Locking must be initiated from the aUSD Token contract, and it's called "stake".
+- User stake aGov token to mint aUSD token at same time, it's called "stake_and_mint".
 - Amount of USD token mint is equal to 20% of the USD values of the aGov token.
-- aGov token have a deposit reward that is similar to the inflation rate as NEAR. Total deposit reward is `(total deposit + total undeposit) * inflation rate`. And reward distributed proportionally based on shared of deposit. Undeposited aGov would not receive deposit reward. Deposit reward is added to the undeposit balance and it's unlocked.
-- To withdraw deposit balance, user is required to burn aUSD token that's equivalent to the 20% of the USD values of the aGov token at the time of withdraw. This operation is called "burn_to_withdraw"
+- aGov token have a deposit reward that is similar to the inflation rate as NEAR. Total deposit reward is `(total deposit + total undeposit) * inflation rate`. And reward distributed proportionally based on shared of deposit. Undeposited aGov would not receive deposit reward. Deposit reward is added to the undeposit balance and it's unstaked.
+- To unstake deposit balance, user is required to burn aUSD token that's equivalent to the 20% of the USD values of the aGov token at the time of unstake. This operation is called "burn_to_unstake"
 
 ## aUSD Token
 
 aUSD token is the main stablecoin token that issued from this system.
 
-- User can freely use aUSD token (it's not locked) and transfer
-- Once user want to unlock the aGov token, 20% value of the aGov token of aUSD token must be burnt with "burn_to_withdraw"
+- User can freely use aUSD token (it's not staked) and transfer
+- Once user want to unstake the aGov token, 20% value of the aGov token of aUSD token must be burnt with "burn_to_unstake"
 - There is no deposit reward for holding aUSD token, so for the holder it's an opportunity loss to not receiving staking reward of NEAR or deposit reward aGov, but the benefit is the stable 1:1 USD value
-- The aUSD's stable is implicitly guaranteed in this mint-deposit-burn-withdraw semantic. And also explictly as Yyou can always swap aUSD to aGov at price `1/x` if aGov is priced at `x` at this moment with `owner`. Owner will take your aUSD and issue you to your available balance. You must have zero deposit before the swap, otherwise you can always call burn_to_withdraw first. Reversely, you can also buy from owner aUSD by swap aGov
+- The aUSD's stable is implicitly guaranteed in this mint-deposit-burn-unstake semantic. And also explictly as Yyou can always swap aUSD to aGov at price `1/x` if aGov is priced at `x` at this moment with `owner`. Owner will take your aUSD and issue you to your available balance. You must have zero deposit before the swap, otherwise you can always call burn_to_unstake first. Reversely, you can also buy from owner aUSD by swap aGov
 - The rely on owner might seem centralized at first glance, but owner will be owned by multisignature account of all aGov holders in future. They'll also have avility to vote given the portion they owned for proposals of change 20%, upgrade contract, etc. That's why it's called governance token
 
 ## NEAR and aGov price oracle
@@ -41,7 +41,7 @@ This provide an alternative way to exchange aGov and aUSD with NEAR and may as t
 
 ### aGov has a higher reward rate than NEAR staking reward
 
-Assume aGov/NEAR at a stable level as they designed to be so, and when market demand and supply is in average aligned. For example 1 aGov = 10 NEAR = 20 USD. Alice have 1000 NEAR, and assume she will get 10% APY if staking on NEAR. If she swap to aGov she'll get 100 aGov, equivallent to 2000 USD. She deposit 2000 USD worth of aGov to mint 400 aUSD. She can then sell 400 aUSD to get back $400 and still receive 10% APY of 2000 USD as aGov's deposit reward. So, she use only $1600 to earn the reward which would only available when invest $2000. This is equivalent to a 12.5% APY instead of 10%. Once she want to withdraw, she will need to buy (assume NEAR and aGov price is same as when she deposit) 400 aUSD to unlock her $2000 worth of deposits.
+Assume aGov/NEAR at a stable level as they designed to be so, and when market demand and supply is in average aligned. For example 1 aGov = 10 NEAR = 20 USD. Alice have 1000 NEAR, and assume she will get 10% APY if staking on NEAR. If she swap to aGov she'll get 100 aGov, equivallent to 2000 USD. She deposit 2000 USD worth of aGov to mint 400 aUSD. She can then sell 400 aUSD to get back $400 and still receive 10% APY of 2000 USD as aGov's deposit reward. So, she use only $1600 to earn the reward which would only available when invest $2000. This is equivalent to a 12.5% APY instead of 10%. Once she want to unstake, she will need to buy (assume NEAR and aGov price is same as when she deposit) 400 aUSD to unstake her $2000 worth of deposits.
 
 ### aUSD stablecoin as the basis of DeFi
 
@@ -53,8 +53,8 @@ As we can see all aUSD comes from mint by deposit aGov. Although there is guaran
 
 ### When aUSD supply redundant
 
-In above scenario aUSD supply would not infinitely increase because once there's more supply than demand on market, the aUSD price on exchanges will drop below \$1, which make buying aUSD to burn to withdraw aGov profitable, because you need to pay less than usual to withdraw same aGov. As more aUSD is burnt, it's supply will be bring back to normal
+In above scenario aUSD supply would not infinitely increase because once there's more supply than demand on market, the aUSD price on exchanges will drop below \$1, which make buying aUSD to burn to unstake aGov profitable, because you need to pay less than usual to unstake same aGov. As more aUSD is burnt, it's supply will be bring back to normal
 
 ### Insufficient liquidity when aGov decrease drastically
 
-If aGov increase in value, there will be no problem as user would bring more aUSD to unlock aGov (20%). However if aGov decrease in value signifcantly, it's theoratically possible that system doesn't have enough liquidity to exchange aUSD to aGov. This is practically impossible, been tested in the Maker and Synthetix system and by chosen a 20% rate to mint, although we don't have a mathematical proof. Consider this example: Alice at day 1 deposit $1000 worth of aGov to mint $200 worth of aUSD. At day 2, aGov price drops 80%, so alice's aGov worth $200 and she also have $200 aUSD. Bob deposit $1000 worth of aGov to mint $200 aUSD. Now system have $1200 worth of aGov and issued $400 aUSD, so even both of them try to exchange aUSD with aGov there's still a \$800 redundancy. In practical even when aGov price drops signifcantly, the weighted average of aGov in system doesn't drop that much and often hedged as there's more users.
+If aGov increase in value, there will be no problem as user would bring more aUSD to unstake aGov (20%). However if aGov decrease in value signifcantly, it's theoratically possible that system doesn't have enough liquidity to exchange aUSD to aGov. This is practically impossible, been tested in the Maker and Synthetix system and by chosen a 20% rate to mint, although we don't have a mathematical proof. Consider this example: Alice at day 1 deposit $1000 worth of aGov to mint $200 worth of aUSD. At day 2, aGov price drops 80%, so alice's aGov worth $200 and she also have $200 aUSD. Bob deposit $1000 worth of aGov to mint $200 aUSD. Now system have $1200 worth of aGov and issued $400 aUSD, so even both of them try to exchange aUSD with aGov there's still a \$800 redundancy. In practical even when aGov price drops signifcantly, the weighted average of aGov in system doesn't drop that much and often hedged as there's more users.

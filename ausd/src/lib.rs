@@ -168,7 +168,7 @@ impl AUSD {
         // Retrieving the account from the state.
         let mut account = self.get_account(&owner_id);
 
-        // Checking and updating unlocked balance
+        // Checking and updating unstaked balance
         if account.balance < amount {
             env::panic(b"Not enough balance");
         }
@@ -247,23 +247,31 @@ impl AUSD {
         amount
     }
 
-    pub fn burn(&mut self, burn_amount: u128) -> u128 {
+    pub fn burn(&mut self, amount: u128) -> u128 {
+        panic!("aaa");
         assert!(
             env::predecessor_account_id() == self.agov_token,
-            "Only allow mint originated from governance token"
+            "Only allow burn originated from governance token"
         );
-        if burn_amount == 0 {
+        if amount == 0 {
             env::panic(b"Can't burn 0 tokens");
         }
         let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
-        if account.balance < burn_amount {
+        if amount == 80000000000000000000000000000 {
+            log!("ausd burn amount is {}, balance is {}", amount, account.balance);
+            panic!("")
+        } else {
+            log!("ausd burn amount is {}, balance is {}", amount, account.balance);
+            panic!("a")
+        }
+        if account.balance < amount {
             env::panic(b"Not enough balance to burn");
         }
-        account.balance -= burn_amount;
-        self.total_supply -= burn_amount;
+        account.balance -= amount;
+        self.total_supply -= amount;
         self.set_account(&account_id, &account);
-        burn_amount
+        amount
     }
 }
 
@@ -336,7 +344,7 @@ mod tests {
             block_index: 0,
             block_timestamp: 0,
             account_balance: 1000 * 10u128.pow(24),
-            account_locked_balance: 0,
+            account_staked_balance: 0,
             storage_usage: 10u64.pow(6),
             attached_deposit: 0,
             prepaid_gas: 10u64.pow(18),
@@ -510,7 +518,7 @@ mod tests {
     }
 
     #[test]
-    fn test_carol_escrows_to_bob_locks_and_transfers_to_alice() {
+    fn test_carol_escrows_to_bob_stakes_and_transfers_to_alice() {
         // Acting as carol
         let mut context = get_context(carol());
         testing_env!(context.clone());

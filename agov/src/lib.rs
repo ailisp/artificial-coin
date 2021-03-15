@@ -11,12 +11,12 @@ static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc:
 
 #[derive(Default, BorshDeserialize, BorshSerialize)]
 pub struct Account {
-    /// Current unlocked balance.
+    /// Current unstaked balance.
     pub balance: Balance,
     /// Allowed account to the allowance amount.
     pub allowances: HashMap<AccountId, Balance>,
-    /// Allowed account to locked balance.
-    pub locked_balances: HashMap<AccountId, Balance>,
+    /// Allowed account to staked balance.
+    pub staked_balances: HashMap<AccountId, Balance>,
 }
 
 impl Account {
@@ -32,33 +32,33 @@ impl Account {
         *self.allowances.get(escrow_account_id).unwrap_or(&0)
     }
 
-    pub fn set_locked_balance(&mut self, escrow_account_id: &AccountId, locked_balance: Balance) {
-        if locked_balance > 0 {
-            self.locked_balances.insert(escrow_account_id.clone(), locked_balance);
+    pub fn set_staked_balance(&mut self, escrow_account_id: &AccountId, staked_balance: Balance) {
+        if staked_balance > 0 {
+            self.staked_balances.insert(escrow_account_id.clone(), staked_balance);
         } else {
-            self.locked_balances.remove(escrow_account_id);
+            self.staked_balances.remove(escrow_account_id);
         }
     }
 
-    pub fn get_locked_balance(&self, escrow_account_id: &AccountId) -> Balance {
-        *self.locked_balances.get(escrow_account_id).unwrap_or(&0)
+    pub fn get_staked_balance(&self, escrow_account_id: &AccountId) -> Balance {
+        *self.staked_balances.get(escrow_account_id).unwrap_or(&0)
     }
 
     pub fn total_balance(&self) -> Balance {
-        self.balance + self.locked_balances.values().sum::<Balance>()
+        self.balance + self.staked_balances.values().sum::<Balance>()
     }
 }
 
 #[ext_contract(ext_usd)]
 pub trait ExtAUSDContract {
     fn mint(&mut self, amount: u128) -> u128;
-    fn burn(&mut self, amount: u128) -> u128;
+    fn burn2(&mut self, amount: u128) -> u128;
     fn get_total_supply(&self) -> U128;
 }
 
 #[ext_contract(ext_gov)]
 pub trait ExtAGovContract {
-    fn unlock(&mut self, owner_id: AccountId, unlock_amount: u128) -> u128;
+    fn unstake(&mut self, owner_id: AccountId, unstake_amount: u128) -> u128;
 }
 
 #[near_bindgen]
@@ -76,11 +76,11 @@ pub struct AGov {
     /// Owner ID
     pub owner: AccountId,
 
-    /// USD token, only allow unlock originate from which
+    /// USD token, only allow unstake originate from which
     pub ausd_token: AccountId,
 
-    /// Total locked balance
-    pub total_locked: Balance,
+    /// Total staked balance
+    pub total_staked: Balance,
 }
 
 impl Default for AGov {
@@ -100,7 +100,7 @@ impl AGov {
             price: 0,
             owner: owner_id.clone(),
             ausd_token,
-            total_locked: 0,
+            total_staked: 0,
         };
         let mut account = ft.get_account(&owner_id);
         account.balance = total_supply;
@@ -110,8 +110,8 @@ impl AGov {
 
     /// Sets amount allowed to spent by `escrow_account_id` on behalf of the caller of the function
     /// (`predecessor_id`) who is considered the balance owner to the new `allowance`.
-    /// If some amount of tokens is currently locked by the `escrow_account_id` the new allowance is
-    /// decreased by the amount of locked tokens.
+    /// If some amount of tokens is currently staked by the `escrow_account_id` the new allowance is
+    /// decreased by the amount of staked tokens.
     pub fn set_allowance(&mut self, escrow_account_id: AccountId, allowance: String) {
         let allowance = u128::from_str(&allowance).expect("Failed to parse allowance");
         let owner_id = env::predecessor_account_id();
@@ -119,12 +119,12 @@ impl AGov {
             env::panic(b"Can't set allowance for yourself");
         }
         let mut account = self.get_account(&owner_id);
-        let locked_balance = account.get_locked_balance(&escrow_account_id);
-        if locked_balance > allowance {
-            env::panic(b"The new allowance can't be less than the amount of locked tokens");
+        let staked_balance = account.get_staked_balance(&escrow_account_id);
+        if staked_balance > allowance {
+            env::panic(b"The new allowance can't be less than the amount of staked tokens");
         }
 
-        account.set_allowance(&escrow_account_id, allowance - locked_balance);
+        account.set_allowance(&escrow_account_id, allowance - staked_balance);
         self.accounts.insert(&owner_id, &account);
     }
 
@@ -137,33 +137,37 @@ impl AGov {
         self.price = price;
     }
 
-    pub fn deposit_and_mint(&mut self, owner_id: AccountId, deposit: String) -> Promise {
+    pub fn stake_and_mint(&mut self, owner_id: AccountId, stake: String) -> Promise {
         if self.price == 0 {
             // Not received any data from oracle
             env::panic(b"No price data from oracle");
         }
-        let lock_amount = self.lock(owner_id.clone(), deposit);
+        let stake_amount = self.stake(owner_id.clone(), stake);
         let unit_price = Ratio::new(self.price, 100_000_000);
-        let mint_amount = Ratio::new(lock_amount, 5) * unit_price;
+        let mint_amount = Ratio::new(stake_amount, 5) * unit_price;
         let mint_amount = mint_amount.to_integer();
         ext_usd::mint(mint_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
     }
 
-    pub fn burn_to_withdraw(&mut self, owner_id: AccountId, withdraw_amount: String) -> Promise {
+    pub fn burn_to_unstake(&mut self, owner_id: AccountId, unstake_amount: String) -> Promise {
         if self.price == 0 {
             // Not received any data from oracle
             env::panic(b"No price data from oracle");
         }
-        let withdraw_amount =
-            u128::from_str(&withdraw_amount).expect("Failed to parse withdraw_amount");
+        let unstake_amount =
+            u128::from_str(&unstake_amount).expect("Failed to parse unstake_amount");
 
         let unit_price = Ratio::new(self.price, 100_000_000);
-        let burn_amount = Ratio::new(withdraw_amount, 5) * unit_price;
+        let burn_amount = Ratio::new(unstake_amount, 5) * unit_price;
         let burn_amount = burn_amount.to_integer();
-        ext_usd::burn(burn_amount, &self.ausd_token, 0, env::prepaid_gas() / 3).then(
-            ext_gov::unlock(
+        if self.price == 4000000000 {
+            log!("burn_amount {}", burn_amount);
+        }
+        ext_usd::burn2(burn_amount, &self.ausd_token, 0, env::prepaid_gas() / 3).then(
+            // ext_usd::mint(burn_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
+            ext_gov::unstake(
                 owner_id,
-                withdraw_amount,
+                unstake_amount,
                 &env::current_account_id(),
                 0,
                 env::prepaid_gas() / 3,
@@ -171,69 +175,69 @@ impl AGov {
         )
     }
 
-    /// Locks an additional `lock_amount` to the caller of the function (`predecessor_id`) from
+    /// Stakes an additional `stake_amount` to the caller of the function (`predecessor_id`) from
     /// the `owner_id`.
     /// Requirements:
     /// * The (`predecessor_id`) should have enough allowance or be the owner.
-    /// * The owner should have enough unlocked balance.
-    fn lock(&mut self, owner_id: AccountId, lock_amount: String) -> u128 {
-        let lock_amount = u128::from_str(&lock_amount).expect("Failed to parse lock_amount");
-        if lock_amount == 0 {
-            env::panic(b"Can't lock 0 tokens");
+    /// * The owner should have enough unstaked balance.
+    fn stake(&mut self, owner_id: AccountId, stake_amount: String) -> u128 {
+        let stake_amount = u128::from_str(&stake_amount).expect("Failed to parse stake_amount");
+        if stake_amount == 0 {
+            env::panic(b"Can't stake 0 tokens");
         }
         let escrow_account_id = env::predecessor_account_id();
         let mut account = self.get_account(&owner_id);
 
-        // Checking and updating unlocked balance
-        if account.balance < lock_amount {
-            env::panic(b"Not enough unlocked balance");
+        // Checking and updating unstaked balance
+        if account.balance < stake_amount {
+            env::panic(b"Not enough unstaked balance");
         }
-        account.balance -= lock_amount;
+        account.balance -= stake_amount;
 
-        // If locking by escrow, need to check and update the allowance.
+        // If staking by escrow, need to check and update the allowance.
         if escrow_account_id != owner_id {
             let allowance = account.get_allowance(&escrow_account_id);
-            if allowance < lock_amount {
+            if allowance < stake_amount {
                 env::panic(b"Not enough allowance");
             }
-            account.set_allowance(&escrow_account_id, allowance - lock_amount);
+            account.set_allowance(&escrow_account_id, allowance - stake_amount);
         }
 
-        // Updating total lock balance
-        let locked_balance = account.get_locked_balance(&escrow_account_id);
-        account.set_locked_balance(&escrow_account_id, locked_balance + lock_amount);
-        self.total_locked += lock_amount;
+        // Updating total stake balance
+        let staked_balance = account.get_staked_balance(&escrow_account_id);
+        account.set_staked_balance(&escrow_account_id, staked_balance + stake_amount);
+        self.total_staked += stake_amount;
 
         self.accounts.insert(&owner_id, &account);
-        lock_amount
+        stake_amount
     }
 
-    /// Unlocks the `unlock_amount` from the owner
+    /// Unstakes the `unstake_amount` from the owner
     #[private]
-    pub fn unlock(&mut self, owner_id: AccountId, unlock_amount: u128) {
-        if unlock_amount == 0 {
-            env::panic(b"Can't unlock 0 tokens");
+    pub fn unstake(&mut self, owner_id: AccountId, unstake_amount: u128) {
+        if unstake_amount == 0 {
+            env::panic(b"Can't unstake 0 tokens");
         }
         let mut account = self.get_account(&owner_id);
 
-        // Checking and updating locked balance
-        let locked_balance = account.get_locked_balance(&owner_id);
-        if locked_balance < unlock_amount {
-            env::panic(b"Not enough locked tokens");
+        // Checking and updating staked balance
+        let staked_balance = account.get_staked_balance(&owner_id);
+        if staked_balance < unstake_amount {
+            env::panic(b"Not enough staked tokens");
         }
-        account.set_locked_balance(&owner_id, locked_balance - unlock_amount);
+        account.set_staked_balance(&owner_id, staked_balance - unstake_amount);
 
-        // Updating unlocked balance
-        account.balance += unlock_amount;
-        self.total_locked -= unlock_amount;
-
+        // Updating unstaked balance
+        account.balance += unstake_amount;
+        self.total_staked -= unstake_amount;
+        log!("{} {}", unstake_amount, staked_balance - unstake_amount);
         self.accounts.insert(&owner_id, &account);
     }
 
-    /// Transfers unlocked `amount` of tokens from `owner_id` to the `new_owner_id`.
+    /// Transfers unstaked `amount` of tokens from `owner_id` to the `new_owner_id`.
     /// Requirements:
     /// * The caller of the function (`predecessor_id`) should have at least `amount` of allowance tokens.
-    /// * The balance owner should have at least `amount` of unlocked (by `predecessor_id`) tokens
+    /// * The balance owner should have at least `amount` of unstaked (by `predecessor_id`) tokens
     pub fn transfer_from(&mut self, owner_id: AccountId, new_owner_id: AccountId, amount: String) {
         let amount = u128::from_str(&amount).expect("Failed to parse allow amount");
         if amount == 0 {
@@ -242,16 +246,16 @@ impl AGov {
         let escrow_account_id = env::predecessor_account_id();
         let mut account = self.get_account(&owner_id);
 
-        // Checking and updating unlocked balance
+        // Checking and updating unstaked balance
         if account.balance < amount {
-            env::panic(b"Not enough unlocked balance");
+            env::panic(b"Not enough unstaked balance");
         }
         account.balance -= amount;
 
         // If transferring by escrow, need to check and update allowance.
         if escrow_account_id != owner_id {
             let allowance = account.get_allowance(&escrow_account_id);
-            // Checking and updating unlocked balance
+            // Checking and updating unstaked balance
             if allowance < amount {
                 env::panic(b"Not enough allowance");
             }
@@ -260,7 +264,7 @@ impl AGov {
 
         self.accounts.insert(&owner_id, &account);
 
-        // Deposit amount to the new owner
+        // Stake amount to the new owner
         let mut new_account = self.get_account(&new_owner_id);
         new_account.balance += amount;
         self.accounts.insert(&new_owner_id, &new_account);
@@ -276,13 +280,13 @@ impl AGov {
         self.total_supply.to_string()
     }
 
-    /// Returns total balance for the `owner_id` account. Including all locked and unlocked tokens.
+    /// Returns total balance for the `owner_id` account. Including all staked and unstaked tokens.
     pub fn get_total_balance(&self, owner_id: AccountId) -> String {
         self.get_account(&owner_id).total_balance().to_string()
     }
 
-    /// Returns unlocked token balance for the `owner_id`.
-    pub fn get_unlocked_balance(&self, owner_id: AccountId) -> String {
+    /// Returns unstaked token balance for the `owner_id`.
+    pub fn get_unstaked_balance(&self, owner_id: AccountId) -> String {
         self.get_account(&owner_id).balance.to_string()
     }
 
@@ -291,9 +295,9 @@ impl AGov {
         self.get_account(&owner_id).get_allowance(&escrow_account_id).to_string()
     }
 
-    /// Returns current locked balance for the `owner_id` locked by `escrow_account_id`.
-    pub fn get_locked_balance(&self, owner_id: AccountId, escrow_account_id: AccountId) -> String {
-        self.get_account(&owner_id).get_locked_balance(&escrow_account_id).to_string()
+    /// Returns current staked balance for the `owner_id` staked by `escrow_account_id`.
+    pub fn get_staked_balance(&self, owner_id: AccountId, escrow_account_id: AccountId) -> String {
+        self.get_account(&owner_id).get_staked_balance(&escrow_account_id).to_string()
     }
 }
 
@@ -350,7 +354,7 @@ mod tests {
         let total_supply = 1_000_000_000_000_000u128;
         let contract = AGov::new(bob(), total_supply.to_string(), "ausd".to_string());
         assert_eq!(contract.get_total_supply(), total_supply.to_string());
-        assert_eq!(contract.get_unlocked_balance(bob()), total_supply.to_string());
+        assert_eq!(contract.get_unstaked_balance(bob()), total_supply.to_string());
         assert_eq!(contract.get_total_balance(bob()), total_supply.to_string());
     }
 
@@ -363,21 +367,21 @@ mod tests {
         let transfer_amount = total_supply / 3;
         contract.transfer(bob(), transfer_amount.to_string());
         assert_eq!(
-            contract.get_unlocked_balance(carol()),
+            contract.get_unstaked_balance(carol()),
             (total_supply - transfer_amount).to_string()
         );
-        assert_eq!(contract.get_unlocked_balance(bob()), transfer_amount.to_string());
+        assert_eq!(contract.get_unstaked_balance(bob()), transfer_amount.to_string());
     }
 
     #[test]
-    fn test_lock_fail() {
+    fn test_stake_fail() {
         let context = get_context(carol());
         testing_env!(context);
         let total_supply = 1_000_000_000_000_000u128;
         let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
         let transfer_amount = total_supply / 3;
         std::panic::catch_unwind(move || {
-            contract.lock(bob(), transfer_amount.to_string());
+            contract.stake(bob(), transfer_amount.to_string());
         })
         .unwrap_err();
     }
@@ -395,25 +399,25 @@ mod tests {
     }
 
     //    #[test]
-    //    fn test_lock_and_unlock_owner() {
+    //    fn test_stake_and_unstake_owner() {
     //        let context = get_context(carol());
     //        testing_env!(context);
     //        let total_supply = 1_000_000_000_000_000u128;
     //        let mut contract = FunToken::new(carol(), total_supply.to_string(), "ausd".to_string());
     //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-    //        let lock_amount = total_supply / 3;
-    //        contract.lock(carol(), lock_amount.to_string());
+    //        let stake_amount = total_supply / 3;
+    //        contract.stake(carol(), stake_amount.to_string());
     //        assert_eq!(
-    //            contract.get_unlocked_balance(carol()),
-    //            (total_supply - lock_amount).to_string()
+    //            contract.get_unstaked_balance(carol()),
+    //            (total_supply - stake_amount).to_string()
     //        );
     //        assert_eq!(
     //            contract.get_total_balance(carol()),
     //            total_supply.to_string()
     //        );
-    //        contract.unlock(carol(), lock_amount);
+    //        contract.unstake(carol(), stake_amount);
     //        assert_eq!(
-    //            contract.get_unlocked_balance(carol()),
+    //            contract.get_unstaked_balance(carol()),
     //            total_supply.to_string()
     //        );
     //        assert_eq!(
@@ -422,107 +426,107 @@ mod tests {
     //        );
     //    }
 
-    #[test]
-    fn test_lock_and_transfer() {
-        let context = get_context(carol());
-        testing_env!(context);
-        let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
-        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-        let lock_amount = total_supply / 3;
-        let transfer_amount = lock_amount / 3;
-        // Locking
-        contract.lock(carol(), lock_amount.to_string());
-        assert_eq!(
-            contract.get_unlocked_balance(carol()),
-            (total_supply - lock_amount).to_string()
-        );
-        assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
-        for i in 1..=5 {
-            // Transfer to bob
-            contract.transfer(bob(), transfer_amount.to_string());
-            assert_eq!(
-                contract.get_unlocked_balance(carol()),
-                format!(
-                    "{}",
-                    std::cmp::min(total_supply - lock_amount, total_supply - transfer_amount * i)
-                )
-            );
-            assert_eq!(
-                contract.get_total_balance(carol()),
-                format!("{}", total_supply - transfer_amount * i)
-            );
-            assert_eq!(contract.get_unlocked_balance(bob()), format!("{}", transfer_amount * i));
-        }
-    }
-
-    #[test]
-    fn test_carol_escrows_to_bob_transfers_to_alice() {
-        // Acting as carol
-        testing_env!(get_context(carol()));
-        let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
-        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-        let allowance = total_supply / 3;
-        let transfer_amount = allowance / 3;
-        contract.set_allowance(bob(), format!("{}", allowance));
-        assert_eq!(contract.get_allowance(carol(), bob()), format!("{}", allowance));
-        // Acting as bob now
-        testing_env!(get_context(bob()));
-        contract.transfer_from(carol(), alice(), transfer_amount.to_string());
-        assert_eq!(
-            contract.get_total_balance(carol()),
-            (total_supply - transfer_amount).to_string()
-        );
-        assert_eq!(contract.get_unlocked_balance(alice()), transfer_amount.to_string());
-        assert_eq!(
-            contract.get_allowance(carol(), bob()),
-            format!("{}", allowance - transfer_amount)
-        );
-    }
-
-    #[test]
-    fn test_carol_escrows_to_bob_locks_and_transfers_to_alice() {
-        // Acting as carol
-        testing_env!(get_context(carol()));
-        let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
-        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-        let allowance = total_supply / 3;
-        let transfer_amount = allowance / 3;
-        let lock_amount = transfer_amount;
-        contract.set_allowance(bob(), format!("{}", allowance));
-        assert_eq!(contract.get_allowance(carol(), bob()), format!("{}", allowance));
-        // Acting as bob now
-        testing_env!(get_context(bob()));
-        contract.lock(carol(), lock_amount.to_string());
-        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - lock_amount).to_string());
-        assert_eq!(
-            contract.get_unlocked_balance(carol()),
-            (total_supply - lock_amount).to_string()
-        );
-        assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
-        contract.transfer_from(carol(), alice(), transfer_amount.to_string());
-        assert_eq!(
-            contract.get_unlocked_balance(carol()),
-            (total_supply - transfer_amount).to_string()
-        );
-        assert_eq!(contract.get_unlocked_balance(alice()), transfer_amount.to_string());
-        assert_eq!(
-            contract.get_allowance(carol(), bob()),
-            format!("{}", allowance - transfer_amount)
-        );
-    }
+    //    #[test]
+    //    fn test_stake_and_transfer() {
+    //        let context = get_context(carol());
+    //        testing_env!(context);
+    //        let total_supply = 1_000_000_000_000_000u128;
+    //        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+    //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
+    //        let stake_amount = total_supply / 3;
+    //        let transfer_amount = stake_amount / 3;
+    //        // Staking
+    //        contract.stake(carol(), stake_amount.to_string());
+    //        assert_eq!(
+    //            contract.get_unstaked_balance(carol()),
+    //            (total_supply - stake_amount).to_string()
+    //        );
+    //        assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
+    //        for i in 1..=5 {
+    //            // Transfer to bob
+    //            contract.transfer(bob(), transfer_amount.to_string());
+    //            assert_eq!(
+    //                contract.get_unstaked_balance(carol()),
+    //                format!(
+    //                    "{}",
+    //                    std::cmp::min(total_supply - stake_amount, total_supply - transfer_amount * i)
+    //                )
+    //            );
+    //            assert_eq!(
+    //                contract.get_total_balance(carol()),
+    //                format!("{}", total_supply - transfer_amount * i)
+    //            );
+    //            assert_eq!(contract.get_unstaked_balance(bob()), format!("{}", transfer_amount * i));
+    //        }
+    //    }
 
     //    #[test]
-    //    fn test_lock_and_unlock_through_allowance() {
+    //    fn test_carol_escrows_to_bob_transfers_to_alice() {
+    //        // Acting as carol
+    //        testing_env!(get_context(carol()));
+    //        let total_supply = 1_000_000_000_000_000u128;
+    //        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+    //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
+    //        let allowance = total_supply / 3;
+    //        let transfer_amount = allowance / 3;
+    //        contract.set_allowance(bob(), format!("{}", allowance));
+    //        assert_eq!(contract.get_allowance(carol(), bob()), format!("{}", allowance));
+    //        // Acting as bob now
+    //        testing_env!(get_context(bob()));
+    //        contract.transfer_from(carol(), alice(), transfer_amount.to_string());
+    //        assert_eq!(
+    //            contract.get_total_balance(carol()),
+    //            (total_supply - transfer_amount).to_string()
+    //        );
+    //        assert_eq!(contract.get_unstaked_balance(alice()), transfer_amount.to_string());
+    //        assert_eq!(
+    //            contract.get_allowance(carol(), bob()),
+    //            format!("{}", allowance - transfer_amount)
+    //        );
+    //    }
+    //
+    //    #[test]
+    //    fn test_carol_escrows_to_bob_stakes_and_transfers_to_alice() {
+    //        // Acting as carol
+    //        testing_env!(get_context(carol()));
+    //        let total_supply = 1_000_000_000_000_000u128;
+    //        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+    //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
+    //        let allowance = total_supply / 3;
+    //        let transfer_amount = allowance / 3;
+    //        let stake_amount = transfer_amount;
+    //        contract.set_allowance(bob(), format!("{}", allowance));
+    //        assert_eq!(contract.get_allowance(carol(), bob()), format!("{}", allowance));
+    //        // Acting as bob now
+    //        testing_env!(get_context(bob()));
+    //        contract.stake(carol(), stake_amount.to_string());
+    //        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - stake_amount).to_string());
+    //        assert_eq!(
+    //            contract.get_unstaked_balance(carol()),
+    //            (total_supply - stake_amount).to_string()
+    //        );
+    //        assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
+    //        contract.transfer_from(carol(), alice(), transfer_amount.to_string());
+    //        assert_eq!(
+    //            contract.get_unstaked_balance(carol()),
+    //            (total_supply - transfer_amount).to_string()
+    //        );
+    //        assert_eq!(contract.get_unstaked_balance(alice()), transfer_amount.to_string());
+    //        assert_eq!(
+    //            contract.get_allowance(carol(), bob()),
+    //            format!("{}", allowance - transfer_amount)
+    //        );
+    //    }
+
+    //    #[test]
+    //    fn test_stake_and_unstake_through_allowance() {
     //        // Acting as carol
     //        testing_env!(get_context(carol()));
     //        let total_supply = 1_000_000_000_000_000u128;
     //        let mut contract = FunToken::new(carol(), total_supply.to_string(), "ausd".to_string());
     //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
     //        let allowance = total_supply / 3;
-    //        let lock_amount = allowance / 2;
+    //        let stake_amount = allowance / 2;
     //        contract.set_allowance(bob(), format!("{}", allowance));
     //        assert_eq!(
     //            contract.get_allowance(carol(), bob()),
@@ -530,26 +534,26 @@ mod tests {
     //        );
     //        // Acting as bob now
     //        testing_env!(get_context(bob()));
-    //        contract.lock(carol(), lock_amount.to_string());
+    //        contract.stake(carol(), stake_amount.to_string());
     //        assert_eq!(
     //            contract.get_allowance(carol(), bob()),
-    //            (allowance - lock_amount).to_string()
+    //            (allowance - stake_amount).to_string()
     //        );
     //        assert_eq!(
-    //            contract.get_unlocked_balance(carol()),
-    //            (total_supply - lock_amount).to_string()
+    //            contract.get_unstaked_balance(carol()),
+    //            (total_supply - stake_amount).to_string()
     //        );
     //        assert_eq!(
     //            contract.get_total_balance(carol()),
     //            total_supply.to_string()
     //        );
-    //        contract.unlock(carol(), lock_amount);
+    //        contract.unstake(carol(), stake_amount);
     //        assert_eq!(
     //            contract.get_allowance(carol(), bob()),
     //            format!("{}", allowance)
     //        );
     //        assert_eq!(
-    //            contract.get_unlocked_balance(carol()),
+    //            contract.get_unstaked_balance(carol()),
     //            total_supply.to_string()
     //        );
     //        assert_eq!(
@@ -559,57 +563,57 @@ mod tests {
     //    }
 
     #[test]
-    fn test_set_allowance_during_lock() {
+    fn test_set_allowance_during_stake() {
         // Acting as carol
         testing_env!(get_context(carol()));
         let total_supply = 1_000_000_000_000_000u128;
         let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
         assert_eq!(contract.get_total_supply(), total_supply.to_string());
         let allowance = 2 * total_supply / 3;
-        let lock_amount = allowance / 2;
+        let stake_amount = allowance / 2;
         contract.set_allowance(bob(), allowance.to_string());
         assert_eq!(contract.get_allowance(carol(), bob()), allowance.to_string());
         // Acting as bob now
         testing_env!(get_context(bob()));
-        contract.lock(carol(), lock_amount.to_string());
-        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - lock_amount).to_string());
+        contract.stake(carol(), stake_amount.to_string());
+        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - stake_amount).to_string());
         assert_eq!(
-            contract.get_unlocked_balance(carol()),
-            (total_supply - lock_amount).to_string()
+            contract.get_unstaked_balance(carol()),
+            (total_supply - stake_amount).to_string()
         );
         assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
         // Acting as carol now
         testing_env!(get_context(carol()));
         contract.set_allowance(bob(), allowance.to_string());
-        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - lock_amount).to_string());
+        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - stake_amount).to_string());
     }
 
     #[test]
-    fn test_competing_locks() {
+    fn test_competing_stakes() {
         // Acting as carol
         testing_env!(get_context(carol()));
         let total_supply = 1_000_000_000_000_000u128;
         let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
         assert_eq!(contract.get_total_supply(), total_supply.to_string());
         let allowance = 2 * total_supply / 3;
-        let lock_amount = allowance;
+        let stake_amount = allowance;
         contract.set_allowance(bob(), allowance.to_string());
         contract.set_allowance(alice(), allowance.to_string());
         assert_eq!(contract.get_allowance(carol(), bob()), allowance.to_string());
         assert_eq!(contract.get_allowance(carol(), alice()), allowance.to_string());
         // Acting as bob now
         testing_env!(get_context(bob()));
-        contract.lock(carol(), lock_amount.to_string());
-        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - lock_amount).to_string());
+        contract.stake(carol(), stake_amount.to_string());
+        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - stake_amount).to_string());
         assert_eq!(
-            contract.get_unlocked_balance(carol()),
-            (total_supply - lock_amount).to_string()
+            contract.get_unstaked_balance(carol()),
+            (total_supply - stake_amount).to_string()
         );
         assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
         // Acting as alice now
         testing_env!(get_context(alice()));
         std::panic::catch_unwind(move || {
-            contract.lock(carol(), lock_amount.to_string());
+            contract.stake(carol(), stake_amount.to_string());
         })
         .unwrap_err();
     }
