@@ -18,7 +18,9 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
 use near_sdk::json_types::U128;
-use near_sdk::{env, log, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage};
+use near_sdk::{
+    env, ext_contract, log, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage,
+};
 
 #[cfg(target_arch = "wasm32")]
 #[global_allocator]
@@ -65,6 +67,11 @@ impl Account {
         let escrow_hash = env::sha256(escrow_account_id.as_bytes());
         self.allowances.get(&escrow_hash).unwrap_or(0)
     }
+}
+
+#[ext_contract(ext_gov)]
+pub trait ExtAGovContract {
+    fn unstake(&mut self, owner_id: AccountId, unstake_amount: u128) -> u128;
 }
 
 #[near_bindgen]
@@ -247,31 +254,23 @@ impl AUSD {
         amount
     }
 
-    pub fn burn(&mut self, amount: u128) -> u128 {
-        panic!("aaa");
+    pub fn burn_to_unstake(&mut self, burn_amount: u128, unstake_amount: u128) -> Promise {
         assert!(
             env::predecessor_account_id() == self.agov_token,
             "Only allow burn originated from governance token"
         );
-        if amount == 0 {
+        if burn_amount == 0 {
             env::panic(b"Can't burn 0 tokens");
         }
         let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
-        if amount == 80000000000000000000000000000 {
-            log!("ausd burn amount is {}, balance is {}", amount, account.balance);
-            panic!("")
-        } else {
-            log!("ausd burn amount is {}, balance is {}", amount, account.balance);
-            panic!("a")
-        }
-        if account.balance < amount {
+        if account.balance < burn_amount {
             env::panic(b"Not enough balance to burn");
         }
-        account.balance -= amount;
-        self.total_supply -= amount;
+        account.balance -= burn_amount;
+        self.total_supply -= burn_amount;
         self.set_account(&account_id, &account);
-        amount
+        ext_gov::unstake(account_id, unstake_amount, &self.agov_token, 0, env::prepaid_gas() / 3)
     }
 }
 

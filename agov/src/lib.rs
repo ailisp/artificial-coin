@@ -52,13 +52,7 @@ impl Account {
 #[ext_contract(ext_usd)]
 pub trait ExtAUSDContract {
     fn mint(&mut self, amount: u128) -> u128;
-    fn burn2(&mut self, amount: u128) -> u128;
-    fn get_total_supply(&self) -> U128;
-}
-
-#[ext_contract(ext_gov)]
-pub trait ExtAGovContract {
-    fn unstake(&mut self, owner_id: AccountId, unstake_amount: u128) -> u128;
+    fn burn_to_unstake(&mut self, burn_amount: u128, unstake_amount: u128) -> Promise;
 }
 
 #[near_bindgen]
@@ -163,15 +157,12 @@ impl AGov {
         if self.price == 4000000000 {
             log!("burn_amount {}", burn_amount);
         }
-        ext_usd::burn2(burn_amount, &self.ausd_token, 0, env::prepaid_gas() / 3).then(
-            // ext_usd::mint(burn_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
-            ext_gov::unstake(
-                owner_id,
-                unstake_amount,
-                &env::current_account_id(),
-                0,
-                env::prepaid_gas() / 3,
-            ),
+        ext_usd::burn_to_unstake(
+            burn_amount,
+            unstake_amount,
+            &self.ausd_token,
+            0,
+            env::prepaid_gas() / 3,
         )
     }
 
@@ -213,8 +204,11 @@ impl AGov {
     }
 
     /// Unstakes the `unstake_amount` from the owner
-    #[private]
     pub fn unstake(&mut self, owner_id: AccountId, unstake_amount: u128) {
+        assert!(
+            env::predecessor_account_id() == self.ausd_token,
+            "Only allow unstake originated from ausd token"
+        );
         if unstake_amount == 0 {
             env::panic(b"Can't unstake 0 tokens");
         }
