@@ -1,6 +1,7 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::{env, ext_contract, log, near_bindgen, AccountId, Balance, Promise};
+use num_rational::Ratio;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -51,7 +52,7 @@ impl Account {
 #[ext_contract(ext_usd)]
 pub trait ExtAUSDContract {
     fn mint(&mut self, amount: u128) -> u128;
-    fn burn(&mut self, agov_amount: u128, agov_total_locked: u128) -> u128;
+    fn burn(&mut self, amount: u128) -> u128;
     fn get_total_supply(&self) -> U128;
 }
 
@@ -142,9 +143,9 @@ impl AGov {
             env::panic(b"No price data from oracle");
         }
         let lock_amount = self.lock(owner_id.clone(), deposit);
-        let mint_amount = (lock_amount / 10u128.pow(24) * self.price / 100_000_000 / 5)
-            .checked_mul(10u128.pow(24))
-            .unwrap();
+        let unit_price = Ratio::new(self.price, 100_000_000);
+        let mint_amount = Ratio::new(lock_amount, 5) * unit_price;
+        let mint_amount = mint_amount.to_integer();
         ext_usd::mint(mint_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
     }
 
@@ -155,22 +156,19 @@ impl AGov {
         }
         let withdraw_amount =
             u128::from_str(&withdraw_amount).expect("Failed to parse withdraw_amount");
-        // burn_amount is  withdraw_amount * (self.price / 100000000) * (ext_usd::get_total_supply() / (self.total_locked * (self.price / 10000000)))
-        // = withdraw_amount * usd_total_supply / self.total_locked
-        ext_usd::burn(
-            withdraw_amount,
-            self.total_locked,
-            &self.ausd_token,
-            0,
-            env::prepaid_gas() / 3,
+
+        let unit_price = Ratio::new(self.price, 100_000_000);
+        let burn_amount = Ratio::new(withdraw_amount, 5) * unit_price;
+        let burn_amount = burn_amount.to_integer();
+        ext_usd::burn(burn_amount, &self.ausd_token, 0, env::prepaid_gas() / 3).then(
+            ext_gov::unlock(
+                owner_id,
+                withdraw_amount,
+                &env::current_account_id(),
+                0,
+                env::prepaid_gas() / 3,
+            ),
         )
-        .then(ext_gov::unlock(
-            owner_id,
-            withdraw_amount,
-            &env::current_account_id(),
-            0,
-            env::prepaid_gas() / 3,
-        ))
     }
 
     /// Locks an additional `lock_amount` to the caller of the function (`predecessor_id`) from

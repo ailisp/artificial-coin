@@ -19,7 +19,6 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
 use near_sdk::json_types::U128;
 use near_sdk::{env, log, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage};
-use num_rational::Ratio;
 
 #[cfg(target_arch = "wasm32")]
 #[global_allocator]
@@ -248,14 +247,11 @@ impl AUSD {
         amount
     }
 
-    pub fn burn(&mut self, agov_amount: u128, agov_total_locked: u128) -> u128 {
+    pub fn burn(&mut self, burn_amount: u128) -> u128 {
         assert!(
             env::predecessor_account_id() == self.agov_token,
             "Only allow mint originated from governance token"
         );
-        // todo: consider use num_rational
-        let burn_amount = Ratio::new(self.total_supply, agov_total_locked) * agov_amount;
-        let burn_amount = burn_amount.to_integer();
         if burn_amount == 0 {
             env::panic(b"Can't burn 0 tokens");
         }

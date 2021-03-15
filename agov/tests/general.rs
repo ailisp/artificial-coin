@@ -264,4 +264,12 @@ fn test_withdraw_when_price_change() {
     .assert_success();
 
     // now bob deposit and mint
+    let bob = master_account.create_user("bob".to_string(), to_yocto("10"));
+    call!(master_account, agov.transfer(bob.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+    call!(bob, agov.deposit_and_mint(bob.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+    let bob_ausd_balance: U128 =
+        view!(ausd.get_balance(bob.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(U128(to_yocto("10000") * 20 / 5), bob_ausd_balance);
 }

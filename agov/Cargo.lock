@@ -89,7 +89,6 @@ name = "ausd"
 version = "0.3.0"
 dependencies = [
  "near-sdk",
- "num-rational 0.4.0",
 ]
 
 [[package]]
