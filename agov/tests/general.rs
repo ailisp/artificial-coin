@@ -248,20 +248,16 @@ fn test_unstake_when_price_change() {
     )
     .assert_success();
 
-    let r = call!(alice, agov.burn_to_unstake(alice.account_id(), to_yocto("10000").to_string()));
+    let r = call!(alice, agov.burn_to_unstake(alice.account_id(), to_yocto("5000").to_string()));
     println!("{:?}", r);
     r.assert_success();
 
-    let alice_ausd_balance: U128 =
-        view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
-    println!("{:?}", alice_ausd_balance);
-
-    // alice restake her agov, now she can mint doubled amount of ausd
-    call!(alice, agov.stake_and_mint(alice.account_id(), to_yocto("10000").to_string()))
+    // alice restake her agov
+    call!(alice, agov.stake_and_mint(alice.account_id(), to_yocto("5000").to_string()))
         .assert_success();
     let alice_ausd_balance: U128 =
         view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
-    assert_eq!(U128(to_yocto("10000") * 40 / 5), alice_ausd_balance);
+    assert_eq!(U128(to_yocto("5000") * 40 / 5), alice_ausd_balance);
 
     // now price goes down
     call!(
