@@ -280,8 +280,22 @@ fn test_exchange_ausd_abtc() {
     let alice_ausd_balance: U128 =
         view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(U128(to_yocto("10000")), alice_ausd_balance);
-    let alice_abtc_balance: u128 =
-        view!(art.get_asset_balance(&alice.account_id().try_into().unwrap(), &"aBTC".to_string()))
+    let alice_abtc_balance: String =
+        view!(art.get_asset_balance(alice.account_id().try_into().unwrap(), "aBTC".to_string()))
             .unwrap_json();
     assert_eq!(alice_abtc_balance, to_yocto("1").to_string());
+
+    call!(master_account, art.submit_asset_price("aBTC".to_string(), "6000000000000".to_string()))
+        .assert_success();
+
+    call!(alice, art.sell_asset_to_ausd("aBTC".to_string(), to_yocto("1").to_string()))
+        .assert_success();
+
+    let alice_ausd_balance: U128 =
+        view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(U128(to_yocto("70000")), alice_ausd_balance);
+    let alice_abtc_balance: String =
+        view!(art.get_asset_balance(alice.account_id().try_into().unwrap(), "aBTC".to_string()))
+            .unwrap_json();
+    assert_eq!(alice_abtc_balance, to_yocto("0").to_string());
 }

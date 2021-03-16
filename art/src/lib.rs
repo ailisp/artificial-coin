@@ -172,7 +172,7 @@ impl Art {
     }
 
     pub fn sell_asset_to_ausd(&mut self, asset: String, asset_amount: String) -> Promise {
-        let asset_price = self.get_asset_price(&asset);
+        let asset_price = self._get_asset_price(&asset);
         if asset_price == 0 {
             env::panic(b"No price data from oracle");
         }
@@ -180,7 +180,7 @@ impl Art {
 
         let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
-        let balance = self.get_asset_balance(&account_id, &asset);
+        let balance = self._get_asset_balance(&account_id, &asset);
         let new_balance = balance.checked_sub(asset_amount).unwrap();
         account.assets.insert(asset.clone(), new_balance);
         self.accounts.insert(&account_id, &account);
@@ -192,7 +192,7 @@ impl Art {
     }
 
     pub fn buy_asset_with_ausd(&mut self, asset: String, asset_amount: String) -> Promise {
-        let asset_price = self.get_asset_price(&asset);
+        let asset_price = self._get_asset_price(&asset);
         if asset_price == 0 {
             env::panic(b"No price data from oracle");
         }
@@ -217,7 +217,7 @@ impl Art {
         );
         let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
-        let balance = self.get_asset_balance(&account_id, &asset);
+        let balance = self._get_asset_balance(&account_id, &asset);
         let new_balance = balance.checked_add(asset_amount).unwrap();
         account.assets.insert(asset.clone(), new_balance);
         self.accounts.insert(&account_id, &account);
@@ -340,16 +340,16 @@ impl Art {
         self.get_account(&account_id).get_staked_balance().to_string()
     }
 
-    pub fn get_price(&self) -> u128 {
-        self.price
+    pub fn get_price(&self) -> String {
+        self.price.to_string()
     }
 
-    pub fn get_asset_price(&self, asset: &String) -> u128 {
-        self.asset_prices.get(asset).unwrap_or_default()
+    pub fn get_asset_price(&self, asset: String) -> String {
+        self._get_asset_price(&asset).to_string()
     }
 
-    pub fn get_asset_balance(&self, account_id: &AccountId, asset: &String) -> Balance {
-        *self.get_account(&account_id).assets.get(asset).unwrap_or(&0)
+    pub fn get_asset_balance(&self, account_id: AccountId, asset: String) -> String {
+        self._get_asset_balance(&account_id, &asset).to_string()
     }
 }
 
@@ -357,6 +357,14 @@ impl Art {
     /// Helper method to get the account details for `owner_id`.
     fn get_account(&self, owner_id: &AccountId) -> Account {
         self.accounts.get(owner_id).unwrap_or_default()
+    }
+
+    fn _get_asset_price(&self, asset: &String) -> u128 {
+        self.asset_prices.get(asset).unwrap_or_default()
+    }
+
+    fn _get_asset_balance(&self, account_id: &AccountId, asset: &String) -> Balance {
+        *self.get_account(&account_id).assets.get(asset).unwrap_or(&0)
     }
 }
 
