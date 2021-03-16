@@ -72,6 +72,7 @@ impl Account {
 #[ext_contract(ext_gov)]
 pub trait ExtArtContract {
     fn unstake(&mut self, unstake_amount: u128) -> u128;
+    fn buy_asset_callback(&mut self, asset: String, asset_amount: u128);
 }
 
 #[near_bindgen]
@@ -254,7 +255,7 @@ impl AUSD {
         amount
     }
 
-    pub fn burn_to_unstake(&mut self, burn_amount: u128, unstake_amount: u128) -> Promise {
+    fn burn(&mut self, burn_amount: u128) {
         assert!(
             env::predecessor_account_id() == self.art_token,
             "Only allow burn originated from governance token"
@@ -270,7 +271,21 @@ impl AUSD {
         account.balance -= burn_amount;
         self.total_supply -= burn_amount;
         self.set_account(&account_id, &account);
+    }
+
+    pub fn burn_to_unstake(&mut self, burn_amount: u128, unstake_amount: u128) -> Promise {
+        self.burn(burn_amount);
         ext_gov::unstake(unstake_amount, &self.art_token, 0, env::prepaid_gas() / 3)
+    }
+
+    pub fn burn_to_buy_asset(
+        &mut self,
+        burn_amount: u128,
+        asset: String,
+        asset_amount: u128,
+    ) -> Promise {
+        self.burn(burn_amount);
+        ext_gov::buy_asset_callback(asset, asset_amount, &self.art_token, 0, env::prepaid_gas() / 3)
     }
 }
 

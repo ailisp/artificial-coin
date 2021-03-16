@@ -50,6 +50,12 @@ impl Account {
 pub trait ExtAUSDContract {
     fn mint(&mut self, amount: u128) -> u128;
     fn burn_to_unstake(&mut self, burn_amount: u128, unstake_amount: u128) -> Promise;
+    fn burn_to_buy_asset(
+        &mut self,
+        burn_amount: u128,
+        asset: String,
+        asset_amount: u128,
+    ) -> Promise;
 }
 
 #[near_bindgen]
@@ -156,9 +162,6 @@ impl Art {
         let unit_price = Ratio::new(self.price, 100_000_000);
         let burn_amount = Ratio::new(unstake_amount, 5) * unit_price;
         let burn_amount = burn_amount.to_integer();
-        if self.price == 4000000000 {
-            log!("burn_amount {}", burn_amount);
-        }
         ext_usd::burn_to_unstake(
             burn_amount,
             unstake_amount,
@@ -166,6 +169,58 @@ impl Art {
             0,
             env::prepaid_gas() / 3,
         )
+    }
+
+    pub fn sell_asset_to_ausd(&mut self, asset: &String, asset_amount: String) -> Promise {
+        let asset_price = self.get_asset_price(&asset);
+        if asset_price == 0 {
+            env::panic(b"No price data from oracle");
+        }
+        let asset_amount = u128::from_str(&asset_amount).expect("Failed to parse asset_amount");
+
+        let account_id = env::signer_account_id();
+        let mut account = self.get_account(&account_id);
+        let balance = self.get_asset_balance(&account_id, asset);
+        let new_balance = balance.checked_sub(asset_amount).unwrap();
+        account.assets.insert(asset.clone(), new_balance);
+        self.accounts.insert(&account_id, &account);
+
+        let unit_price = Ratio::new(asset_price, 100_000_000);
+        let mint_amount = unit_price * asset_amount;
+        let mint_amount = mint_amount.to_integer();
+        ext_usd::mint(mint_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
+    }
+
+    pub fn buy_asset_with_ausd(&mut self, asset: &String, asset_amount: String) -> Promise {
+        let asset_price = self.get_asset_price(&asset);
+        if asset_price == 0 {
+            env::panic(b"No price data from oracle");
+        }
+        let asset_amount = u128::from_str(&asset_amount).expect("Failed to parse asset_amount");
+        let unit_price = Ratio::new(asset_price, 100_000_000);
+        let burn_amount = unit_price * asset_amount;
+        let burn_amount = burn_amount.to_integer();
+        ext_usd::burn_to_buy_asset(
+            burn_amount,
+            asset.clone(),
+            asset_amount,
+            &self.ausd_token,
+            0,
+            env::prepaid_gas() / 3,
+        )
+    }
+
+    pub fn buy_asset_callback(&mut self, asset: String, asset_amount: u128) {
+        assert!(
+            env::predecessor_account_id() == self.ausd_token,
+            "Only allow unstake originated from ausd token"
+        );
+        let account_id = env::signer_account_id();
+        let mut account = self.get_account(&account_id);
+        let balance = self.get_asset_balance(&account_id, &asset);
+        let new_balance = balance.checked_add(asset_amount).unwrap();
+        account.assets.insert(asset.clone(), new_balance);
+        self.accounts.insert(&account_id, &account);
     }
 
     /// Stakes an additional `stake_amount` to the signer
