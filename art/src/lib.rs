@@ -272,6 +272,10 @@ impl Art {
     pub fn get_staked_balance(&self, account_id: AccountId) -> String {
         self.get_account(&account_id).get_staked_balance().to_string()
     }
+
+    pub fn get_price(&self) -> u128 {
+        self.price
+    }
 }
 
 impl Art {
