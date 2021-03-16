@@ -280,7 +280,7 @@ fn test_exchange_ausd_abtc() {
     let alice_ausd_balance: U128 =
         view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(U128(to_yocto("10000")), alice_ausd_balance);
-    let alice_abtc_balance: String =
+    let alice_abtc_balance: u128 =
         view!(art.get_asset_balance(&alice.account_id().try_into().unwrap(), &"aBTC".to_string()))
             .unwrap_json();
     assert_eq!(alice_abtc_balance, to_yocto("1").to_string());
