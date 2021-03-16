@@ -71,7 +71,7 @@ impl Account {
 
 #[ext_contract(ext_gov)]
 pub trait ExtArtContract {
-    fn unstake(&mut self, owner_id: AccountId, unstake_amount: u128) -> u128;
+    fn unstake(&mut self, unstake_amount: u128) -> u128;
 }
 
 #[near_bindgen]
@@ -270,7 +270,7 @@ impl AUSD {
         account.balance -= burn_amount;
         self.total_supply -= burn_amount;
         self.set_account(&account_id, &account);
-        ext_gov::unstake(account_id, unstake_amount, &self.art_token, 0, env::prepaid_gas() / 3)
+        ext_gov::unstake(unstake_amount, &self.art_token, 0, env::prepaid_gas() / 3)
     }
 }
 
@@ -343,7 +343,7 @@ mod tests {
             block_index: 0,
             block_timestamp: 0,
             account_balance: 1000 * 10u128.pow(24),
-            account_staked_balance: 0,
+            account_locked_balance: 0,
             storage_usage: 10u64.pow(6),
             attached_deposit: 0,
             prepaid_gas: 10u64.pow(18),

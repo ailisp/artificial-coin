@@ -1,5 +1,4 @@
-use near_sdk::serde_json::json;
-use near_sdk::{env, json_types::U128};
+use near_sdk::json_types::U128;
 use near_sdk_sim::{
     call, deploy, init_simulator, to_yocto, view, ContractAccount, UserAccount, DEFAULT_GAS,
     STORAGE_AMOUNT,
@@ -52,8 +51,7 @@ fn test_initial_issue() {
         gas = DEFAULT_GAS * 4
     )
     .assert_success();
-    let res =
-        call!(master_account, art.stake_and_mint(master_account.account_id(), deposit_amount));
+    let res = call!(master_account, art.stake_and_mint(deposit_amount));
     assert!(res.is_ok());
     let total_supply: U128 = view!(ausd.get_total_supply()).unwrap_json();
     assert_eq!(total_supply.0, (to_yocto(INIT_ART_BALANCE) / 2 * 20 / 5));
@@ -64,11 +62,9 @@ fn test_initial_issue() {
         view!(art.get_unstaked_balance(master_account.account_id().try_into().unwrap()))
             .unwrap_json();
     assert_eq!(master_unstaked_art_balance, (to_yocto(INIT_ART_BALANCE) / 2).to_string());
-    let master_staked_art_balance: String = view!(art.get_staked_balance(
-        master_account.account_id().try_into().unwrap(),
-        master_account.account_id().try_into().unwrap()
-    ))
-    .unwrap_json();
+    let master_staked_art_balance: String =
+        view!(art.get_staked_balance(master_account.account_id().try_into().unwrap()))
+            .unwrap_json();
     assert_eq!(master_staked_art_balance, (to_yocto(INIT_ART_BALANCE) / 2).to_string());
 }
 
@@ -82,8 +78,7 @@ fn test_transfer_art() {
         gas = DEFAULT_GAS * 4
     )
     .assert_success();
-    call!(master_account, art.stake_and_mint(master_account.account_id(), stake_amount))
-        .assert_success();
+    call!(master_account, art.stake_and_mint(stake_amount)).assert_success();
 
     let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
     call!(master_account, art.transfer(alice.account_id(), to_yocto("10000").to_string()))
@@ -95,22 +90,17 @@ fn test_transfer_art() {
         master_unstaked_art_balance,
         (to_yocto(INIT_ART_BALANCE) / 2 - to_yocto("10000")).to_string()
     );
-    let master_staked_art_balance: String = view!(art.get_staked_balance(
-        master_account.account_id().try_into().unwrap(),
-        master_account.account_id().try_into().unwrap()
-    ))
-    .unwrap_json();
+    let master_staked_art_balance: String =
+        view!(art.get_staked_balance(master_account.account_id().try_into().unwrap()))
+            .unwrap_json();
     assert_eq!(master_staked_art_balance, (to_yocto(INIT_ART_BALANCE) / 2).to_string());
 
     let alice_unstaked_art_balance: String =
         view!(art.get_unstaked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(alice_unstaked_art_balance, to_yocto("10000").to_string());
 
-    let alice_staked_art_balance: String = view!(art.get_staked_balance(
-        alice.account_id().try_into().unwrap(),
-        alice.account_id().try_into().unwrap()
-    ))
-    .unwrap_json();
+    let alice_staked_art_balance: String =
+        view!(art.get_staked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(alice_staked_art_balance, (to_yocto("0")).to_string());
 
     let bob = master_account.create_user("bob".to_string(), to_yocto("10"));
@@ -135,14 +125,13 @@ fn test_mint_ausd() {
         gas = DEFAULT_GAS * 4
     )
     .assert_success();
-    call!(master_account, art.stake_and_mint(master_account.account_id(), stake_amount))
-        .assert_success();
+    call!(master_account, art.stake_and_mint(stake_amount)).assert_success();
 
     let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
     call!(master_account, art.transfer(alice.account_id(), to_yocto("10000").to_string()))
         .assert_success();
 
-    let res = call!(alice, art.stake_and_mint(alice.account_id(), to_yocto("10000").to_string()));
+    let res = call!(alice, art.stake_and_mint(to_yocto("10000").to_string()));
     assert!(res.is_ok());
     let total_supply: U128 = view!(ausd.get_total_supply()).unwrap_json();
     assert_eq!(total_supply.0, ((to_yocto(INIT_ART_BALANCE) / 2 + to_yocto("10000")) * 20 / 5));
@@ -153,11 +142,8 @@ fn test_mint_ausd() {
     let alice_unstaked_art_balance: String =
         view!(art.get_unstaked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(alice_unstaked_art_balance, (to_yocto("0")).to_string());
-    let alice_staked_art_balance: String = view!(art.get_staked_balance(
-        alice.account_id().try_into().unwrap(),
-        alice.account_id().try_into().unwrap()
-    ))
-    .unwrap_json();
+    let alice_staked_art_balance: String =
+        view!(art.get_staked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(alice_staked_art_balance, (to_yocto("10000")).to_string());
 
     let bob = master_account.create_user("bob".to_string(), to_yocto("10"));
@@ -188,16 +174,14 @@ fn test_burn_unstake() {
         gas = DEFAULT_GAS * 4
     )
     .assert_success();
-    call!(master_account, art.stake_and_mint(master_account.account_id(), stake_amount))
-        .assert_success();
+    call!(master_account, art.stake_and_mint(stake_amount)).assert_success();
 
     let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
     call!(master_account, art.transfer(alice.account_id(), to_yocto("10000").to_string()))
         .assert_success();
 
-    call!(alice, art.stake_and_mint(alice.account_id(), to_yocto("10000").to_string()))
-        .assert_success();
-    let r = call!(alice, art.burn_to_unstake(alice.account_id(), to_yocto("10000").to_string()));
+    call!(alice, art.stake_and_mint(to_yocto("10000").to_string())).assert_success();
+    let r = call!(alice, art.burn_to_unstake(to_yocto("10000").to_string()));
     println!("{:?}", r);
     r.assert_success();
 
@@ -207,11 +191,8 @@ fn test_burn_unstake() {
     let alice_unstaked_art_balance: String =
         view!(art.get_unstaked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(alice_unstaked_art_balance, (to_yocto("10000")).to_string());
-    let alice_staked_art_balance: String = view!(art.get_staked_balance(
-        alice.account_id().try_into().unwrap(),
-        alice.account_id().try_into().unwrap()
-    ))
-    .unwrap_json();
+    let alice_staked_art_balance: String =
+        view!(art.get_staked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(alice_staked_art_balance, (to_yocto("0")).to_string());
 }
 
@@ -225,15 +206,13 @@ fn test_unstake_when_price_change() {
         gas = DEFAULT_GAS * 4
     )
     .assert_success();
-    call!(master_account, art.stake_and_mint(master_account.account_id(), stake_amount))
-        .assert_success();
+    call!(master_account, art.stake_and_mint(stake_amount)).assert_success();
 
     let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
     call!(master_account, art.transfer(alice.account_id(), to_yocto("10000").to_string()))
         .assert_success();
 
-    call!(alice, art.stake_and_mint(alice.account_id(), to_yocto("10000").to_string()))
-        .assert_success();
+    call!(alice, art.stake_and_mint(to_yocto("10000").to_string())).assert_success();
 
     let alice_ausd_balance: U128 =
         view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
@@ -248,13 +227,12 @@ fn test_unstake_when_price_change() {
     )
     .assert_success();
 
-    let r = call!(alice, art.burn_to_unstake(alice.account_id(), to_yocto("5000").to_string()));
+    let r = call!(alice, art.burn_to_unstake(to_yocto("5000").to_string()));
     println!("{:?}", r);
     r.assert_success();
 
     // alice restake her art
-    call!(alice, art.stake_and_mint(alice.account_id(), to_yocto("5000").to_string()))
-        .assert_success();
+    call!(alice, art.stake_and_mint(to_yocto("5000").to_string())).assert_success();
     let alice_ausd_balance: U128 =
         view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(U128(to_yocto("5000") * 40 / 5), alice_ausd_balance);
@@ -271,8 +249,7 @@ fn test_unstake_when_price_change() {
     let bob = master_account.create_user("bob".to_string(), to_yocto("10"));
     call!(master_account, art.transfer(bob.account_id(), to_yocto("10000").to_string()))
         .assert_success();
-    call!(bob, art.stake_and_mint(bob.account_id(), to_yocto("10000").to_string()))
-        .assert_success();
+    call!(bob, art.stake_and_mint(to_yocto("10000").to_string())).assert_success();
     let bob_ausd_balance: U128 =
         view!(ausd.get_balance(bob.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(U128(to_yocto("10000") * 20 / 5), bob_ausd_balance);

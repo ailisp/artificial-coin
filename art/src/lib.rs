@@ -16,7 +16,7 @@ pub struct Account {
     /// Allowed account to the allowance amount.
     pub allowances: HashMap<AccountId, Balance>,
     /// Allowed account to staked balance.
-    pub staked_balances: HashMap<AccountId, Balance>,
+    pub staked_balance: Balance,
 }
 
 impl Account {
@@ -32,20 +32,16 @@ impl Account {
         *self.allowances.get(escrow_account_id).unwrap_or(&0)
     }
 
-    pub fn set_staked_balance(&mut self, escrow_account_id: &AccountId, staked_balance: Balance) {
-        if staked_balance > 0 {
-            self.staked_balances.insert(escrow_account_id.clone(), staked_balance);
-        } else {
-            self.staked_balances.remove(escrow_account_id);
-        }
+    pub fn set_staked_balance(&mut self, staked_balance: Balance) {
+        self.staked_balance = staked_balance;
     }
 
-    pub fn get_staked_balance(&self, escrow_account_id: &AccountId) -> Balance {
-        *self.staked_balances.get(escrow_account_id).unwrap_or(&0)
+    pub fn get_staked_balance(&self) -> Balance {
+        self.staked_balance
     }
 
     pub fn total_balance(&self) -> Balance {
-        self.balance + self.staked_balances.values().sum::<Balance>()
+        self.balance + self.staked_balance
     }
 }
 
@@ -104,8 +100,6 @@ impl Art {
 
     /// Sets amount allowed to spent by `escrow_account_id` on behalf of the caller of the function
     /// (`predecessor_id`) who is considered the balance owner to the new `allowance`.
-    /// If some amount of tokens is currently staked by the `escrow_account_id` the new allowance is
-    /// decreased by the amount of staked tokens.
     pub fn set_allowance(&mut self, escrow_account_id: AccountId, allowance: String) {
         let allowance = u128::from_str(&allowance).expect("Failed to parse allowance");
         let owner_id = env::predecessor_account_id();
@@ -113,12 +107,8 @@ impl Art {
             env::panic(b"Can't set allowance for yourself");
         }
         let mut account = self.get_account(&owner_id);
-        let staked_balance = account.get_staked_balance(&escrow_account_id);
-        if staked_balance > allowance {
-            env::panic(b"The new allowance can't be less than the amount of staked tokens");
-        }
 
-        account.set_allowance(&escrow_account_id, allowance - staked_balance);
+        account.set_allowance(&escrow_account_id, allowance);
         self.accounts.insert(&owner_id, &account);
     }
 
@@ -131,19 +121,19 @@ impl Art {
         self.price = price;
     }
 
-    pub fn stake_and_mint(&mut self, owner_id: AccountId, stake: String) -> Promise {
+    pub fn stake_and_mint(&mut self, stake: String) -> Promise {
         if self.price == 0 {
             // Not received any data from oracle
             env::panic(b"No price data from oracle");
         }
-        let stake_amount = self.stake(owner_id.clone(), stake);
+        let stake_amount = self.stake(stake);
         let unit_price = Ratio::new(self.price, 100_000_000);
         let mint_amount = Ratio::new(stake_amount, 5) * unit_price;
         let mint_amount = mint_amount.to_integer();
         ext_usd::mint(mint_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
     }
 
-    pub fn burn_to_unstake(&mut self, owner_id: AccountId, unstake_amount: String) -> Promise {
+    pub fn burn_to_unstake(&mut self, unstake_amount: String) -> Promise {
         if self.price == 0 {
             // Not received any data from oracle
             env::panic(b"No price data from oracle");
@@ -166,18 +156,16 @@ impl Art {
         )
     }
 
-    /// Stakes an additional `stake_amount` to the caller of the function (`predecessor_id`) from
-    /// the `owner_id`.
+    /// Stakes an additional `stake_amount` to the signer
     /// Requirements:
-    /// * The (`predecessor_id`) should have enough allowance or be the owner.
-    /// * The owner should have enough unstaked balance.
-    fn stake(&mut self, owner_id: AccountId, stake_amount: String) -> u128 {
+    /// * The signer should have enough unstaked balance.
+    fn stake(&mut self, stake_amount: String) -> u128 {
         let stake_amount = u128::from_str(&stake_amount).expect("Failed to parse stake_amount");
         if stake_amount == 0 {
             env::panic(b"Can't stake 0 tokens");
         }
-        let escrow_account_id = env::predecessor_account_id();
-        let mut account = self.get_account(&owner_id);
+        let account_id = env::signer_account_id();
+        let mut account = self.get_account(&account_id);
 
         // Checking and updating unstaked balance
         if account.balance < stake_amount {
@@ -185,26 +173,17 @@ impl Art {
         }
         account.balance -= stake_amount;
 
-        // If staking by escrow, need to check and update the allowance.
-        if escrow_account_id != owner_id {
-            let allowance = account.get_allowance(&escrow_account_id);
-            if allowance < stake_amount {
-                env::panic(b"Not enough allowance");
-            }
-            account.set_allowance(&escrow_account_id, allowance - stake_amount);
-        }
-
         // Updating total stake balance
-        let staked_balance = account.get_staked_balance(&escrow_account_id);
-        account.set_staked_balance(&escrow_account_id, staked_balance + stake_amount);
+        let staked_balance = account.get_staked_balance();
+        account.set_staked_balance(staked_balance + stake_amount);
         self.total_staked += stake_amount;
 
-        self.accounts.insert(&owner_id, &account);
+        self.accounts.insert(&account_id, &account);
         stake_amount
     }
 
     /// Unstakes the `unstake_amount` from the owner
-    pub fn unstake(&mut self, owner_id: AccountId, unstake_amount: u128) {
+    pub fn unstake(&mut self, unstake_amount: u128) {
         assert!(
             env::predecessor_account_id() == self.ausd_token,
             "Only allow unstake originated from ausd token"
@@ -212,20 +191,20 @@ impl Art {
         if unstake_amount == 0 {
             env::panic(b"Can't unstake 0 tokens");
         }
-        let mut account = self.get_account(&owner_id);
+        let account_id = env::signer_account_id();
+        let mut account = self.get_account(&account_id);
 
         // Checking and updating staked balance
-        let staked_balance = account.get_staked_balance(&owner_id);
+        let staked_balance = account.get_staked_balance();
         if staked_balance < unstake_amount {
             env::panic(b"Not enough staked tokens");
         }
-        account.set_staked_balance(&owner_id, staked_balance - unstake_amount);
+        account.set_staked_balance(staked_balance - unstake_amount);
 
         // Updating unstaked balance
         account.balance += unstake_amount;
         self.total_staked -= unstake_amount;
-        log!("{} {}", unstake_amount, staked_balance - unstake_amount);
-        self.accounts.insert(&owner_id, &account);
+        self.accounts.insert(&account_id, &account);
     }
 
     /// Transfers unstaked `amount` of tokens from `owner_id` to the `new_owner_id`.
@@ -290,8 +269,8 @@ impl Art {
     }
 
     /// Returns current staked balance for the `owner_id` staked by `escrow_account_id`.
-    pub fn get_staked_balance(&self, owner_id: AccountId, escrow_account_id: AccountId) -> String {
-        self.get_account(&owner_id).get_staked_balance(&escrow_account_id).to_string()
+    pub fn get_staked_balance(&self, account_id: AccountId) -> String {
+        self.get_account(&account_id).get_staked_balance().to_string()
     }
 }
 
@@ -375,7 +354,7 @@ mod tests {
         let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
         let transfer_amount = total_supply / 3;
         std::panic::catch_unwind(move || {
-            contract.stake(bob(), transfer_amount.to_string());
+            contract.stake(transfer_amount.to_string());
         })
         .unwrap_err();
     }
@@ -392,223 +371,28 @@ mod tests {
         .unwrap_err();
     }
 
-    //    #[test]
-    //    fn test_stake_and_unstake_owner() {
-    //        let context = get_context(carol());
-    //        testing_env!(context);
-    //        let total_supply = 1_000_000_000_000_000u128;
-    //        let mut contract = FunToken::new(carol(), total_supply.to_string(), "ausd".to_string());
-    //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-    //        let stake_amount = total_supply / 3;
-    //        contract.stake(carol(), stake_amount.to_string());
-    //        assert_eq!(
-    //            contract.get_unstaked_balance(carol()),
-    //            (total_supply - stake_amount).to_string()
-    //        );
-    //        assert_eq!(
-    //            contract.get_total_balance(carol()),
-    //            total_supply.to_string()
-    //        );
-    //        contract.unstake(carol(), stake_amount);
-    //        assert_eq!(
-    //            contract.get_unstaked_balance(carol()),
-    //            total_supply.to_string()
-    //        );
-    //        assert_eq!(
-    //            contract.get_total_balance(carol()),
-    //            total_supply.to_string()
-    //        );
-    //    }
-
-    //    #[test]
-    //    fn test_stake_and_transfer() {
-    //        let context = get_context(carol());
-    //        testing_env!(context);
-    //        let total_supply = 1_000_000_000_000_000u128;
-    //        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
-    //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-    //        let stake_amount = total_supply / 3;
-    //        let transfer_amount = stake_amount / 3;
-    //        // Staking
-    //        contract.stake(carol(), stake_amount.to_string());
-    //        assert_eq!(
-    //            contract.get_unstaked_balance(carol()),
-    //            (total_supply - stake_amount).to_string()
-    //        );
-    //        assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
-    //        for i in 1..=5 {
-    //            // Transfer to bob
-    //            contract.transfer(bob(), transfer_amount.to_string());
-    //            assert_eq!(
-    //                contract.get_unstaked_balance(carol()),
-    //                format!(
-    //                    "{}",
-    //                    std::cmp::min(total_supply - stake_amount, total_supply - transfer_amount * i)
-    //                )
-    //            );
-    //            assert_eq!(
-    //                contract.get_total_balance(carol()),
-    //                format!("{}", total_supply - transfer_amount * i)
-    //            );
-    //            assert_eq!(contract.get_unstaked_balance(bob()), format!("{}", transfer_amount * i));
-    //        }
-    //    }
-
-    //    #[test]
-    //    fn test_carol_escrows_to_bob_transfers_to_alice() {
-    //        // Acting as carol
-    //        testing_env!(get_context(carol()));
-    //        let total_supply = 1_000_000_000_000_000u128;
-    //        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
-    //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-    //        let allowance = total_supply / 3;
-    //        let transfer_amount = allowance / 3;
-    //        contract.set_allowance(bob(), format!("{}", allowance));
-    //        assert_eq!(contract.get_allowance(carol(), bob()), format!("{}", allowance));
-    //        // Acting as bob now
-    //        testing_env!(get_context(bob()));
-    //        contract.transfer_from(carol(), alice(), transfer_amount.to_string());
-    //        assert_eq!(
-    //            contract.get_total_balance(carol()),
-    //            (total_supply - transfer_amount).to_string()
-    //        );
-    //        assert_eq!(contract.get_unstaked_balance(alice()), transfer_amount.to_string());
-    //        assert_eq!(
-    //            contract.get_allowance(carol(), bob()),
-    //            format!("{}", allowance - transfer_amount)
-    //        );
-    //    }
-    //
-    //    #[test]
-    //    fn test_carol_escrows_to_bob_stakes_and_transfers_to_alice() {
-    //        // Acting as carol
-    //        testing_env!(get_context(carol()));
-    //        let total_supply = 1_000_000_000_000_000u128;
-    //        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
-    //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-    //        let allowance = total_supply / 3;
-    //        let transfer_amount = allowance / 3;
-    //        let stake_amount = transfer_amount;
-    //        contract.set_allowance(bob(), format!("{}", allowance));
-    //        assert_eq!(contract.get_allowance(carol(), bob()), format!("{}", allowance));
-    //        // Acting as bob now
-    //        testing_env!(get_context(bob()));
-    //        contract.stake(carol(), stake_amount.to_string());
-    //        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - stake_amount).to_string());
-    //        assert_eq!(
-    //            contract.get_unstaked_balance(carol()),
-    //            (total_supply - stake_amount).to_string()
-    //        );
-    //        assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
-    //        contract.transfer_from(carol(), alice(), transfer_amount.to_string());
-    //        assert_eq!(
-    //            contract.get_unstaked_balance(carol()),
-    //            (total_supply - transfer_amount).to_string()
-    //        );
-    //        assert_eq!(contract.get_unstaked_balance(alice()), transfer_amount.to_string());
-    //        assert_eq!(
-    //            contract.get_allowance(carol(), bob()),
-    //            format!("{}", allowance - transfer_amount)
-    //        );
-    //    }
-
-    //    #[test]
-    //    fn test_stake_and_unstake_through_allowance() {
-    //        // Acting as carol
-    //        testing_env!(get_context(carol()));
-    //        let total_supply = 1_000_000_000_000_000u128;
-    //        let mut contract = FunToken::new(carol(), total_supply.to_string(), "ausd".to_string());
-    //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-    //        let allowance = total_supply / 3;
-    //        let stake_amount = allowance / 2;
-    //        contract.set_allowance(bob(), format!("{}", allowance));
-    //        assert_eq!(
-    //            contract.get_allowance(carol(), bob()),
-    //            format!("{}", allowance)
-    //        );
-    //        // Acting as bob now
-    //        testing_env!(get_context(bob()));
-    //        contract.stake(carol(), stake_amount.to_string());
-    //        assert_eq!(
-    //            contract.get_allowance(carol(), bob()),
-    //            (allowance - stake_amount).to_string()
-    //        );
-    //        assert_eq!(
-    //            contract.get_unstaked_balance(carol()),
-    //            (total_supply - stake_amount).to_string()
-    //        );
-    //        assert_eq!(
-    //            contract.get_total_balance(carol()),
-    //            total_supply.to_string()
-    //        );
-    //        contract.unstake(carol(), stake_amount);
-    //        assert_eq!(
-    //            contract.get_allowance(carol(), bob()),
-    //            format!("{}", allowance)
-    //        );
-    //        assert_eq!(
-    //            contract.get_unstaked_balance(carol()),
-    //            total_supply.to_string()
-    //        );
-    //        assert_eq!(
-    //            contract.get_total_balance(carol()),
-    //            total_supply.to_string()
-    //        );
-    //    }
-
     #[test]
-    fn test_set_allowance_during_stake() {
+    fn test_carol_escrows_to_bob_transfers_to_alice() {
         // Acting as carol
         testing_env!(get_context(carol()));
         let total_supply = 1_000_000_000_000_000u128;
         let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
         assert_eq!(contract.get_total_supply(), total_supply.to_string());
-        let allowance = 2 * total_supply / 3;
-        let stake_amount = allowance / 2;
-        contract.set_allowance(bob(), allowance.to_string());
-        assert_eq!(contract.get_allowance(carol(), bob()), allowance.to_string());
+        let allowance = total_supply / 3;
+        let transfer_amount = allowance / 3;
+        contract.set_allowance(bob(), format!("{}", allowance));
+        assert_eq!(contract.get_allowance(carol(), bob()), format!("{}", allowance));
         // Acting as bob now
         testing_env!(get_context(bob()));
-        contract.stake(carol(), stake_amount.to_string());
-        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - stake_amount).to_string());
+        contract.transfer_from(carol(), alice(), transfer_amount.to_string());
         assert_eq!(
-            contract.get_unstaked_balance(carol()),
-            (total_supply - stake_amount).to_string()
+            contract.get_total_balance(carol()),
+            (total_supply - transfer_amount).to_string()
         );
-        assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
-        // Acting as carol now
-        testing_env!(get_context(carol()));
-        contract.set_allowance(bob(), allowance.to_string());
-        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - stake_amount).to_string());
-    }
-
-    #[test]
-    fn test_competing_stakes() {
-        // Acting as carol
-        testing_env!(get_context(carol()));
-        let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
-        assert_eq!(contract.get_total_supply(), total_supply.to_string());
-        let allowance = 2 * total_supply / 3;
-        let stake_amount = allowance;
-        contract.set_allowance(bob(), allowance.to_string());
-        contract.set_allowance(alice(), allowance.to_string());
-        assert_eq!(contract.get_allowance(carol(), bob()), allowance.to_string());
-        assert_eq!(contract.get_allowance(carol(), alice()), allowance.to_string());
-        // Acting as bob now
-        testing_env!(get_context(bob()));
-        contract.stake(carol(), stake_amount.to_string());
-        assert_eq!(contract.get_allowance(carol(), bob()), (allowance - stake_amount).to_string());
+        assert_eq!(contract.get_unstaked_balance(alice()), transfer_amount.to_string());
         assert_eq!(
-            contract.get_unstaked_balance(carol()),
-            (total_supply - stake_amount).to_string()
+            contract.get_allowance(carol(), bob()),
+            format!("{}", allowance - transfer_amount)
         );
-        assert_eq!(contract.get_total_balance(carol()), total_supply.to_string());
-        // Acting as alice now
-        testing_env!(get_context(alice()));
-        std::panic::catch_unwind(move || {
-            contract.stake(carol(), stake_amount.to_string());
-        })
-        .unwrap_err();
     }
 }
