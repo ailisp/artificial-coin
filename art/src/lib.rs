@@ -171,7 +171,7 @@ impl Art {
         )
     }
 
-    pub fn sell_asset_to_ausd(&mut self, asset: &String, asset_amount: String) -> Promise {
+    pub fn sell_asset_to_ausd(&mut self, asset: String, asset_amount: String) -> Promise {
         let asset_price = self.get_asset_price(&asset);
         if asset_price == 0 {
             env::panic(b"No price data from oracle");
@@ -180,7 +180,7 @@ impl Art {
 
         let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
-        let balance = self.get_asset_balance(&account_id, asset);
+        let balance = self.get_asset_balance(&account_id, &asset);
         let new_balance = balance.checked_sub(asset_amount).unwrap();
         account.assets.insert(asset.clone(), new_balance);
         self.accounts.insert(&account_id, &account);
@@ -191,7 +191,7 @@ impl Art {
         ext_usd::mint(mint_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
     }
 
-    pub fn buy_asset_with_ausd(&mut self, asset: &String, asset_amount: String) -> Promise {
+    pub fn buy_asset_with_ausd(&mut self, asset: String, asset_amount: String) -> Promise {
         let asset_price = self.get_asset_price(&asset);
         if asset_price == 0 {
             env::panic(b"No price data from oracle");

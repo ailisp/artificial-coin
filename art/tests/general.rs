@@ -254,3 +254,34 @@ fn test_unstake_when_price_change() {
         view!(ausd.get_balance(bob.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(U128(to_yocto("10000") * 20 / 5), bob_ausd_balance);
 }
+
+#[test]
+fn test_exchange_ausd_abtc() {
+    let (master_account, art, ausd) = init();
+    let stake_amount = (to_yocto(INIT_ART_BALANCE) / 2).to_string();
+    call!(
+        master_account,
+        art.submit_price("2000000000".to_string()), // every art is $20
+        gas = DEFAULT_GAS * 4
+    )
+    .assert_success();
+    call!(master_account, art.submit_asset_price("aBTC".to_string(), "3000000000000".to_string()))
+        .assert_success();
+    call!(master_account, art.stake_and_mint(stake_amount)).assert_success();
+
+    let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
+    call!(master_account, art.transfer(alice.account_id(), to_yocto("10000").to_string()))
+        .assert_success();
+
+    call!(alice, art.stake_and_mint(to_yocto("10000").to_string())).assert_success();
+    call!(alice, art.buy_asset_with_ausd("aBTC".to_string(), to_yocto("1").to_string()))
+        .assert_success();
+
+    let alice_ausd_balance: U128 =
+        view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(U128(to_yocto("10000")), alice_ausd_balance);
+    let alice_abtc_balance: String =
+        view!(art.get_asset_balance(&alice.account_id().try_into().unwrap(), &"aBTC".to_string()))
+            .unwrap_json();
+    assert_eq!(alice_abtc_balance, to_yocto("1").to_string());
+}
