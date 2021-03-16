@@ -70,7 +70,7 @@ impl Account {
 }
 
 #[ext_contract(ext_gov)]
-pub trait ExtAGovContract {
+pub trait ExtArtContract {
     fn unstake(&mut self, owner_id: AccountId, unstake_amount: u128) -> u128;
 }
 
@@ -84,7 +84,7 @@ pub struct AUSD {
     pub total_supply: Balance,
 
     /// Governance token, only allow mint originate from which
-    pub agov_token: AccountId,
+    pub art_token: AccountId,
 }
 
 #[near_bindgen]
@@ -92,10 +92,10 @@ impl AUSD {
     /// Initializes the contract with the given total supply owned by the given `owner_id`.
     /// TODO: In prod, initial total supply should be 0
     #[init]
-    pub fn new(owner_id: AccountId, total_supply: U128, agov_token: AccountId) -> Self {
+    pub fn new(owner_id: AccountId, total_supply: U128, art_token: AccountId) -> Self {
         let total_supply = total_supply.into();
         assert!(!env::state_exists(), "Already initialized");
-        let mut ft = Self { accounts: LookupMap::new(b"a".to_vec()), total_supply, agov_token };
+        let mut ft = Self { accounts: LookupMap::new(b"a".to_vec()), total_supply, art_token };
         let mut account = ft.get_account(&owner_id);
         account.balance = total_supply;
         ft.set_account(&owner_id, &account);
@@ -240,7 +240,7 @@ impl AUSD {
 
     pub fn mint(&mut self, amount: u128) -> u128 {
         assert!(
-            env::predecessor_account_id() == self.agov_token,
+            env::predecessor_account_id() == self.art_token,
             "Only allow mint originated from governance token"
         );
         let account_id = env::signer_account_id();
@@ -256,7 +256,7 @@ impl AUSD {
 
     pub fn burn_to_unstake(&mut self, burn_amount: u128, unstake_amount: u128) -> Promise {
         assert!(
-            env::predecessor_account_id() == self.agov_token,
+            env::predecessor_account_id() == self.art_token,
             "Only allow burn originated from governance token"
         );
         if burn_amount == 0 {
@@ -270,7 +270,7 @@ impl AUSD {
         account.balance -= burn_amount;
         self.total_supply -= burn_amount;
         self.set_account(&account_id, &account);
-        ext_gov::unstake(account_id, unstake_amount, &self.agov_token, 0, env::prepaid_gas() / 3)
+        ext_gov::unstake(account_id, unstake_amount, &self.art_token, 0, env::prepaid_gas() / 3)
     }
 }
 
@@ -359,7 +359,7 @@ mod tests {
         let context = get_context(carol());
         testing_env!(context);
         let total_supply = 1_000_000_000_000_000u128;
-        let contract = AUSD::new(bob(), total_supply.into(), "agov".to_string());
+        let contract = AUSD::new(bob(), total_supply.into(), "art".to_string());
         assert_eq!(contract.get_total_supply().0, total_supply);
         assert_eq!(contract.get_balance(bob()).0, total_supply);
     }
@@ -377,7 +377,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.storage_usage = env::storage_usage();
 
         context.attached_deposit = 1000 * STORAGE_PRICE_PER_BYTE;
@@ -400,7 +400,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.storage_usage = env::storage_usage();
 
         context.attached_deposit = 1000 * STORAGE_PRICE_PER_BYTE;
@@ -415,7 +415,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.attached_deposit = STORAGE_PRICE_PER_BYTE * 1000;
         testing_env!(context.clone());
         contract.inc_allowance(carol(), (total_supply / 2).into());
@@ -427,7 +427,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.attached_deposit = STORAGE_PRICE_PER_BYTE * 1000;
         testing_env!(context.clone());
         contract.dec_allowance(carol(), (total_supply / 2).into());
@@ -438,7 +438,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.attached_deposit = STORAGE_PRICE_PER_BYTE * 1000;
         testing_env!(context.clone());
         contract.dec_allowance(bob(), (total_supply / 2).into());
@@ -450,7 +450,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = std::u128::MAX;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.attached_deposit = STORAGE_PRICE_PER_BYTE * 1000;
         testing_env!(context.clone());
         contract.inc_allowance(bob(), total_supply.into());
@@ -466,7 +466,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.attached_deposit = 0;
         testing_env!(context.clone());
         contract.inc_allowance(bob(), (total_supply / 2).into());
@@ -478,7 +478,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.storage_usage = env::storage_usage();
 
         context.is_view = true;
@@ -522,7 +522,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.storage_usage = env::storage_usage();
 
         context.is_view = true;
@@ -566,7 +566,7 @@ mod tests {
         let mut context = get_context(carol());
         testing_env!(context.clone());
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AUSD::new(carol(), total_supply.into(), "agov".to_string());
+        let mut contract = AUSD::new(carol(), total_supply.into(), "art".to_string());
         context.storage_usage = env::storage_usage();
 
         let initial_balance = context.account_balance;

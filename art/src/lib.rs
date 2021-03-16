@@ -57,14 +57,14 @@ pub trait ExtAUSDContract {
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
-pub struct AGov {
+pub struct Art {
     /// AccountID -> Account details.
     pub accounts: UnorderedMap<AccountId, Account>,
 
     /// Total supply of the all token, in yocto
     pub total_supply: Balance,
 
-    /// Current price, each 10^8 aGov in USD
+    /// Current price, each 10^8 art in USD
     pub price: u128,
 
     /// Owner ID
@@ -77,14 +77,14 @@ pub struct AGov {
     pub total_staked: Balance,
 }
 
-impl Default for AGov {
+impl Default for Art {
     fn default() -> Self {
         panic!("Fun token should be initialized before usage")
     }
 }
 
 #[near_bindgen]
-impl AGov {
+impl Art {
     #[init]
     pub fn new(owner_id: AccountId, total_supply: String, ausd_token: AccountId) -> Self {
         let total_supply = u128::from_str(&total_supply).expect("Failed to parse total supply");
@@ -295,7 +295,7 @@ impl AGov {
     }
 }
 
-impl AGov {
+impl Art {
     /// Helper method to get the account details for `owner_id`.
     fn get_account(&self, owner_id: &AccountId) -> Account {
         self.accounts.get(owner_id).unwrap_or_default()
@@ -346,7 +346,7 @@ mod tests {
         let context = get_context(carol());
         testing_env!(context);
         let total_supply = 1_000_000_000_000_000u128;
-        let contract = AGov::new(bob(), total_supply.to_string(), "ausd".to_string());
+        let contract = Art::new(bob(), total_supply.to_string(), "ausd".to_string());
         assert_eq!(contract.get_total_supply(), total_supply.to_string());
         assert_eq!(contract.get_unstaked_balance(bob()), total_supply.to_string());
         assert_eq!(contract.get_total_balance(bob()), total_supply.to_string());
@@ -357,7 +357,7 @@ mod tests {
         let context = get_context(carol());
         testing_env!(context);
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
         let transfer_amount = total_supply / 3;
         contract.transfer(bob(), transfer_amount.to_string());
         assert_eq!(
@@ -372,7 +372,7 @@ mod tests {
         let context = get_context(carol());
         testing_env!(context);
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
         let transfer_amount = total_supply / 3;
         std::panic::catch_unwind(move || {
             contract.stake(bob(), transfer_amount.to_string());
@@ -385,7 +385,7 @@ mod tests {
         let context = get_context(carol());
         testing_env!(context);
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
         std::panic::catch_unwind(move || {
             contract.set_allowance(carol(), format!("{}", total_supply / 2));
         })
@@ -425,7 +425,7 @@ mod tests {
     //        let context = get_context(carol());
     //        testing_env!(context);
     //        let total_supply = 1_000_000_000_000_000u128;
-    //        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+    //        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
     //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
     //        let stake_amount = total_supply / 3;
     //        let transfer_amount = stake_amount / 3;
@@ -459,7 +459,7 @@ mod tests {
     //        // Acting as carol
     //        testing_env!(get_context(carol()));
     //        let total_supply = 1_000_000_000_000_000u128;
-    //        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+    //        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
     //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
     //        let allowance = total_supply / 3;
     //        let transfer_amount = allowance / 3;
@@ -484,7 +484,7 @@ mod tests {
     //        // Acting as carol
     //        testing_env!(get_context(carol()));
     //        let total_supply = 1_000_000_000_000_000u128;
-    //        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+    //        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
     //        assert_eq!(contract.get_total_supply(), total_supply.to_string());
     //        let allowance = total_supply / 3;
     //        let transfer_amount = allowance / 3;
@@ -561,7 +561,7 @@ mod tests {
         // Acting as carol
         testing_env!(get_context(carol()));
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
         assert_eq!(contract.get_total_supply(), total_supply.to_string());
         let allowance = 2 * total_supply / 3;
         let stake_amount = allowance / 2;
@@ -587,7 +587,7 @@ mod tests {
         // Acting as carol
         testing_env!(get_context(carol()));
         let total_supply = 1_000_000_000_000_000u128;
-        let mut contract = AGov::new(carol(), total_supply.to_string(), "ausd".to_string());
+        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
         assert_eq!(contract.get_total_supply(), total_supply.to_string());
         let allowance = 2 * total_supply / 3;
         let stake_amount = allowance;

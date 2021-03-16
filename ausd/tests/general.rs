@@ -29,7 +29,7 @@ fn init(initial_balance: u128) -> (UserAccount, ContractAccount<AUSDContract>, U
         // User deploying the contract,
         signer_account: master_account,
         // init method
-        init_method: new(master_account.account_id(), initial_balance.into(), "agov".to_string())
+        init_method: new(master_account.account_id(), initial_balance.into(), "art".to_string())
     );
     let alice = master_account.create_user("alice".to_string(), to_yocto("100"));
     (master_account, contract_user, alice)
