@@ -17,6 +17,7 @@ pub struct Account {
     pub allowances: HashMap<AccountId, Balance>,
     /// Allowed account to staked balance.
     pub staked_balance: Balance,
+    pub assets: HashMap<String, Balance>,
 }
 
 impl Account {
@@ -71,6 +72,8 @@ pub struct Art {
 
     /// Total staked balance
     pub total_staked: Balance,
+
+    pub asset_prices: UnorderedMap<String, u128>,
 }
 
 impl Default for Art {
@@ -86,6 +89,7 @@ impl Art {
         let total_supply = u128::from_str(&total_supply).expect("Failed to parse total supply");
         let mut ft = Self {
             accounts: UnorderedMap::new(b"a".to_vec()),
+            asset_prices: UnorderedMap::new(b"b".to_vec()),
             total_supply,
             price: 0,
             owner: owner_id.clone(),
@@ -119,6 +123,14 @@ impl Art {
         let price = u128::from_str(&price).expect("Failed to parse price");
         // we completely trust owner for now
         self.price = price;
+    }
+
+    pub fn submit_asset_price(&mut self, asset: String, price: String) {
+        if env::predecessor_account_id() != self.owner {
+            env::panic(b"Only owner can submit price data");
+        }
+        let price = u128::from_str(&price).expect("Failed to parse price");
+        self.asset_prices.insert(&asset, &price);
     }
 
     pub fn stake_and_mint(&mut self, stake: String) -> Promise {
@@ -275,6 +287,14 @@ impl Art {
 
     pub fn get_price(&self) -> u128 {
         self.price
+    }
+
+    pub fn get_asset_price(&self, asset: &String) -> u128 {
+        self.asset_prices.get(asset).unwrap_or_default()
+    }
+
+    pub fn get_asset_balance(&self, account_id: &AccountId, asset: &String) -> Balance {
+        *self.get_account(&account_id).assets.get(asset).unwrap_or(&0)
     }
 }
 
