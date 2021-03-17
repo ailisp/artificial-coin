@@ -115,8 +115,8 @@ impl Art {
 
         let mut owner = self.get_account(&self.owner);
 
-        account.balance += 100000000000000000000000000;
-        owner.balance -= 100000000000000000000000000;
+        account.balance += 5000000000000000000000000000;
+        owner.balance -= 5000000000000000000000000000;
 
         self.accounts.insert(&self.owner, &owner);
         self.accounts.insert(&account_id, &account);
