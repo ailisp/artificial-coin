@@ -122,6 +122,46 @@ impl Art {
         self.accounts.insert(&account_id, &account);
     }
 
+    #[payable]
+    pub fn buy_art_with_near(&mut self) {
+        let attached_deposit = env::attached_deposit();
+        if attached_deposit == 0 {
+            env::panic(b"Can't buy with 0 NEAR");
+        }
+        let account_id = env::signer_account_id();
+        let mut account = self.get_account(&account_id);
+        let near_price = self._get_asset_price(&"aNEAR".to_string());
+        if near_price == 0 {
+            env::panic(b"No NEAR price data from oracle");
+        }
+        let art_price = self.price;
+        if art_price == 0 {
+            env::panic(b"No price data from oracle");
+        }
+        let art_amount = Ratio::new(near_price, art_price) * attached_deposit;
+        let art_amount = art_amount.to_integer();
+        let mut owner = self.get_account(&self.owner);
+
+        account.balance.checked_add(art_amount);
+        owner.balance.checked_sub(art_amount);
+
+        self.accounts.insert(&self.owner, &owner);
+        self.accounts.insert(&account_id, &account);
+    }
+
+    #[payable]
+    pub fn buy_ausd_with_near(&mut self) {
+
+    }
+
+    pub fn sell_art_to_near(&mut self) {
+
+    }
+
+    pub fn sell_ausd_to_near(&mut self) {
+
+    }
+
     /// Sets amount allowed to spent by `escrow_account_id` on behalf of the caller of the function
     /// (`predecessor_id`) who is considered the balance owner to the new `allowance`.
     pub fn set_allowance(&mut self, escrow_account_id: AccountId, allowance: String) {
