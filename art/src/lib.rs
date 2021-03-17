@@ -108,6 +108,20 @@ impl Art {
         ft
     }
 
+    pub fn get_some_art(&mut self) {
+        // TODO replace with buy with NEAR
+        let account_id = env::signer_account_id();
+        let mut account = self.get_account(&account_id);
+
+        let mut owner = self.get_account(&self.owner);
+
+        account.balance += 100000000000000000000000000;
+        owner.balance -= 100000000000000000000000000;
+
+        self.accounts.insert(&self.owner, &owner);
+        self.accounts.insert(&account_id, &account);
+    }
+
     /// Sets amount allowed to spent by `escrow_account_id` on behalf of the caller of the function
     /// (`predecessor_id`) who is considered the balance owner to the new `allowance`.
     pub fn set_allowance(&mut self, escrow_account_id: AccountId, allowance: String) {
