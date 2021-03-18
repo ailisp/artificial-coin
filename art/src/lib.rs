@@ -90,7 +90,7 @@ impl Default for Art {
 
 #[near_bindgen]
 impl Art {
-    #[init]
+    #[init(ignore_state)]
     pub fn new(owner_id: AccountId, total_supply: String, ausd_token: AccountId) -> Self {
         let total_supply = u128::from_str(&total_supply).expect("Failed to parse total supply");
         let mut ft = Self {
@@ -151,15 +151,12 @@ impl Art {
 
     #[payable]
     pub fn buy_ausd_with_near(&mut self) {
-
     }
 
     pub fn sell_art_to_near(&mut self) {
-
     }
 
     pub fn sell_ausd_to_near(&mut self) {
-
     }
 
     /// Sets amount allowed to spent by `escrow_account_id` on behalf of the caller of the function
