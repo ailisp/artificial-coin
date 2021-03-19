@@ -1,5 +1,8 @@
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::UnorderedMap;
+use near_sdk::{
+    borsh::{self, BorshDeserialize, BorshSerialize},
+    json_types::U128,
+};
 use near_sdk::{env, ext_contract, log, near_bindgen, AccountId, Balance, Promise};
 use num_rational::Ratio;
 use std::collections::HashMap;
@@ -56,6 +59,7 @@ pub trait ExtAUSDContract {
         asset: String,
         asset_amount: u128,
     ) -> Promise;
+    fn buy_ausd(&mut self, new_owner_id: AccountId, amount: U128);
 }
 
 #[near_bindgen]
@@ -108,19 +112,19 @@ impl Art {
         ft
     }
 
-    pub fn get_some_art(&mut self) {
-        // TODO replace with buy with NEAR
-        let account_id = env::signer_account_id();
-        let mut account = self.get_account(&account_id);
+    // pub fn get_some_art(&mut self) {
+    //     // TODO replace with buy with NEAR
+    //     let account_id = env::signer_account_id();
+    //     let mut account = self.get_account(&account_id);
 
-        let mut owner = self.get_account(&self.owner);
+    //     let mut owner = self.get_account(&self.owner);
 
-        account.balance += 5000000000000000000000000000;
-        owner.balance -= 5000000000000000000000000000;
+    //     account.balance += 5000000000000000000000000000;
+    //     owner.balance -= 5000000000000000000000000000;
 
-        self.accounts.insert(&self.owner, &owner);
-        self.accounts.insert(&account_id, &account);
-    }
+    //     self.accounts.insert(&self.owner, &owner);
+    //     self.accounts.insert(&account_id, &account);
+    // }
 
     #[payable]
     pub fn buy_art_with_near(&mut self) {
@@ -142,22 +146,38 @@ impl Art {
         let art_amount = art_amount.to_integer();
         let mut owner = self.get_account(&self.owner);
 
-        account.balance.checked_add(art_amount);
-        owner.balance.checked_sub(art_amount);
+        account.balance = account.balance.checked_add(art_amount).unwrap();
+        owner.balance = owner.balance.checked_sub(art_amount).unwrap();
 
         self.accounts.insert(&self.owner, &owner);
         self.accounts.insert(&account_id, &account);
     }
 
     #[payable]
-    pub fn buy_ausd_with_near(&mut self) {
+    pub fn buy_ausd_with_near(&mut self) -> Promise {
+        let attached_deposit = env::attached_deposit();
+        if attached_deposit == 0 {
+            env::panic(b"Can't buy with 0 NEAR");
+        }
+        let account_id = env::signer_account_id();
+        let near_price = self._get_asset_price(&"aNEAR".to_string());
+        if near_price == 0 {
+            env::panic(b"No NEAR price data from oracle");
+        }
+        let ausd_amount = Ratio::new(near_price, 100000000) * attached_deposit;
+        let ausd_amount = ausd_amount.to_integer();
+        ext_usd::buy_ausd(
+            account_id,
+            U128(ausd_amount),
+            &self.ausd_token,
+            0,
+            env::prepaid_gas() / 2,
+        )
     }
 
-    pub fn sell_art_to_near(&mut self) {
-    }
+    pub fn sell_art_to_near(&mut self) {}
 
-    pub fn sell_ausd_to_near(&mut self) {
-    }
+    pub fn sell_ausd_to_near(&mut self) {}
 
     /// Sets amount allowed to spent by `escrow_account_id` on behalf of the caller of the function
     /// (`predecessor_id`) who is considered the balance owner to the new `allowance`.

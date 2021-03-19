@@ -86,6 +86,9 @@ pub struct AUSD {
 
     /// Governance token, only allow mint originate from which
     pub art_token: AccountId,
+
+    /// Who created this account, should be same as the one created Art contract
+    pub owner_id: AccountId,
 }
 
 #[near_bindgen]
@@ -96,7 +99,12 @@ impl AUSD {
     pub fn new(owner_id: AccountId, total_supply: U128, art_token: AccountId) -> Self {
         let total_supply = total_supply.into();
         assert!(!env::state_exists(), "Already initialized");
-        let mut ft = Self { accounts: LookupMap::new(b"a".to_vec()), total_supply, art_token };
+        let mut ft = Self {
+            accounts: LookupMap::new(b"a".to_vec()),
+            total_supply,
+            art_token,
+            owner_id: owner_id.clone(),
+        };
         let mut account = ft.get_account(&owner_id);
         account.balance = total_supply;
         ft.set_account(&owner_id, &account);
@@ -286,6 +294,21 @@ impl AUSD {
     ) -> Promise {
         self.burn(burn_amount);
         ext_gov::buy_asset_callback(asset, asset_amount, &self.art_token, 0, env::prepaid_gas() / 3)
+    }
+
+    pub fn buy_ausd(&mut self, new_owner_id: AccountId, amount: U128) {
+        assert!(
+            env::predecessor_account_id() == self.art_token,
+            "Only allow buy ausd originated from governance token"
+        );
+        let mut account = self.get_account(&new_owner_id);
+        account.balance = account.balance.checked_add(amount.0).unwrap();
+        let contract_owner_id = self.owner_id.clone();
+        let mut owner = self.get_account(&contract_owner_id);
+        owner.balance = owner.balance.checked_sub(amount.0).unwrap();
+
+        self.set_account(&new_owner_id, &account);
+        self.set_account(&contract_owner_id, &owner);
     }
 }
 
