@@ -315,13 +315,31 @@ fn test_buy_ausd_with_near() {
         .assert_success();
     call!(master_account, art.stake_and_mint(stake_amount)).assert_success();
 
-    let master_ausd_balance: U128 =
-        view!(ausd.get_balance(master_account.account_id().try_into().unwrap())).unwrap_json();
-    println!("{:?}", master_ausd_balance);
-
     let alice = master_account.create_user("alice".to_string(), to_yocto("101"));
     call!(alice, art.buy_ausd_with_near(), deposit = to_yocto("100")).assert_success();
     let alice_ausd_balance: U128 =
         view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
     assert_eq!(U128(to_yocto("500")), alice_ausd_balance);
+}
+
+#[test]
+fn test_buy_art_with_near() {
+    let (master_account, art, ausd) = init();
+    let stake_amount = (to_yocto(INIT_ART_BALANCE) / 2).to_string();
+    call!(
+        master_account,
+        art.submit_price("2000000000".to_string()), // every art is $20
+        gas = DEFAULT_GAS * 4
+    )
+    .assert_success();
+    call!(master_account, art.submit_asset_price("aNEAR".to_string(), "500000000".to_string())) // 1 NEAR = 5 ausd
+        .assert_success();
+    call!(master_account, art.stake_and_mint(stake_amount)).assert_success();
+
+    let alice = master_account.create_user("alice".to_string(), to_yocto("101"));
+    call!(alice, art.buy_art_with_near(), deposit = to_yocto("100")).assert_success();
+
+    let alice_unstaked_art_balance: String =
+        view!(art.get_unstaked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(alice_unstaked_art_balance, (to_yocto("25")).to_string());
 }
