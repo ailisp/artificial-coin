@@ -95,7 +95,7 @@ pub struct AUSD {
 impl AUSD {
     /// Initializes the contract with the given total supply owned by the given `owner_id`.
     /// TODO: In prod, initial total supply should be 0
-    #[init]
+    #[init(ignore_state)]
     pub fn new(owner_id: AccountId, total_supply: U128, art_token: AccountId) -> Self {
         let total_supply = total_supply.into();
         assert!(!env::state_exists(), "Already initialized");
