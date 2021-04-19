@@ -85,31 +85,6 @@ pub struct Art {
 
     // Asset Prices
     pub asset_prices: UnorderedMap<String, u128>,
-}
-
-// #[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize)]
-pub struct ArtV2 {
-    /// AccountID -> Account details.
-    pub accounts: UnorderedMap<AccountId, Account>,
-
-    /// Total supply of the all token, in yocto
-    pub total_supply: Balance,
-
-    /// Current price, each 10^8 art in USD
-    pub price: u128,
-
-    /// Owner ID
-    pub owner: AccountId,
-
-    /// USD token, only allow unstake originate from which
-    pub ausd_token: AccountId,
-
-    /// Total staked balance
-    pub total_staked: Balance,
-
-    // Asset Prices
-    pub asset_prices: UnorderedMap<String, u128>,
 
     /// Total stake shares
     pub total_shares: u128,
@@ -137,21 +112,13 @@ impl Art {
             owner: owner_id.clone(),
             ausd_token,
             total_staked: 0,
+            stake_shares: UnorderedMap::new(b"c".to_vec()),
+            total_shares: 0,
         };
         let mut account = ft.get_account(&owner_id);
         account.balance = total_supply;
         ft.accounts.insert(&owner_id, &account);
         ft
-    }
-
-    pub fn upgrade_to_v2(&self) {
-        if env::predecessor_account_id() != self.owner {
-            env::panic(b"Only owner can submit price data");
-        }
-        // let v1 = &self.try_to_vec().unwrap();
-        let v2 = ArtV2::fromArt(self);
-        // assert!(v1.len() < v2.len());
-        env::state_write(&v2);
     }
 
     #[payable]
@@ -452,24 +419,6 @@ impl Art {
     }
 
     fn maybe_stake_reward(&self) {}
-}
-
-impl ArtV2 {
-    pub fn fromArt(art: &Art) -> Self {
-        let accounts = art.accounts.try_to_vec().unwrap();
-        let accounts = UnorderedMap::<_, _>::try_from_slice(&accounts).unwrap();
-        ArtV2 {
-            accounts: accounts,
-            asset_prices: art.asset_prices.clone(),
-            total_supply: art.total_supply,
-            price: art.price,
-            owner: art.owner.clone(),
-            ausd_token: art.ausd_token.clone(),
-            total_staked: art.total_staked,
-            stake_shares: UnorderedMap::new(b"c".to_vec()),
-            total_shares: 0,
-        }
-    }
 }
 
 impl Art {
