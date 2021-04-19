@@ -83,7 +83,39 @@ pub struct Art {
     /// Total staked balance
     pub total_staked: Balance,
 
+    // Asset Prices
     pub asset_prices: UnorderedMap<String, u128>,
+}
+
+// #[near_bindgen]
+#[derive(BorshDeserialize, BorshSerialize)]
+pub struct ArtV2 {
+    /// AccountID -> Account details.
+    pub accounts: UnorderedMap<AccountId, Account>,
+
+    /// Total supply of the all token, in yocto
+    pub total_supply: Balance,
+
+    /// Current price, each 10^8 art in USD
+    pub price: u128,
+
+    /// Owner ID
+    pub owner: AccountId,
+
+    /// USD token, only allow unstake originate from which
+    pub ausd_token: AccountId,
+
+    /// Total staked balance
+    pub total_staked: Balance,
+
+    // Asset Prices
+    pub asset_prices: UnorderedMap<String, u128>,
+
+    /// Total stake shares
+    pub total_shares: u128,
+
+    /// Stake shares per account
+    pub stake_shares: UnorderedMap<AccountId, u128>,
 }
 
 impl Default for Art {
@@ -112,19 +144,15 @@ impl Art {
         ft
     }
 
-    // pub fn get_some_art(&mut self) {
-    //     // TODO replace with buy with NEAR
-    //     let account_id = env::signer_account_id();
-    //     let mut account = self.get_account(&account_id);
-
-    //     let mut owner = self.get_account(&self.owner);
-
-    //     account.balance += 5000000000000000000000000000;
-    //     owner.balance -= 5000000000000000000000000000;
-
-    //     self.accounts.insert(&self.owner, &owner);
-    //     self.accounts.insert(&account_id, &account);
-    // }
+    pub fn upgrade_to_v2(&self) {
+        if env::predecessor_account_id() != self.owner {
+            env::panic(b"Only owner can submit price data");
+        }
+        // let v1 = &self.try_to_vec().unwrap();
+        let v2 = ArtV2::fromArt(self);
+        // assert!(v1.len() < v2.len());
+        env::state_write(&v2);
+    }
 
     #[payable]
     pub fn buy_art_with_near(&mut self) {
@@ -421,6 +449,26 @@ impl Art {
 
     pub fn get_asset_balance(&self, account_id: AccountId, asset: String) -> String {
         self._get_asset_balance(&account_id, &asset).to_string()
+    }
+
+    fn maybe_stake_reward(&self) {}
+}
+
+impl ArtV2 {
+    pub fn fromArt(art: &Art) -> Self {
+        let accounts = art.accounts.try_to_vec().unwrap();
+        let accounts = UnorderedMap::<_, _>::try_from_slice(&accounts).unwrap();
+        ArtV2 {
+            accounts: accounts,
+            asset_prices: art.asset_prices.clone(),
+            total_supply: art.total_supply,
+            price: art.price,
+            owner: art.owner.clone(),
+            ausd_token: art.ausd_token.clone(),
+            total_staked: art.total_staked,
+            stake_shares: UnorderedMap::new(b"c".to_vec()),
+            total_shares: 0,
+        }
     }
 }
 
