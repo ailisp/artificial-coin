@@ -12,6 +12,10 @@ use std::str::FromStr;
 #[global_allocator]
 static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
 
+pub const DAY_INTEREST: Ratio<u128> = Ratio::new_raw(1000261157876068, 1000000000000000);
+pub const MONTH_INTEREST: Ratio<u128> = Ratio::new_raw(1007864477220626, 1000000000000000);
+pub const YEAR_INTEREST: Ratio<u128> = Ratio::new_raw(11, 10);
+
 #[derive(Default, BorshDeserialize, BorshSerialize)]
 pub struct Account {
     /// Current unstaked balance.
@@ -86,11 +90,11 @@ pub struct Art {
     // Asset Prices
     pub asset_prices: UnorderedMap<String, u128>,
 
-    /// Total stake shares
-    pub total_shares: u128,
+    /// Stake rewards paid at per account
+    pub reward_paid_at: UnorderedMap<AccountId, u64>,
 
-    /// Stake shares per account
-    pub stake_shares: UnorderedMap<AccountId, u128>,
+    /// Staking reward enabled at timestamp, when this version of contract deployed
+    pub staking_reward_enabled_at: u64,
 }
 
 impl Default for Art {
@@ -112,13 +116,52 @@ impl Art {
             owner: owner_id.clone(),
             ausd_token,
             total_staked: 0,
-            stake_shares: UnorderedMap::new(b"c".to_vec()),
-            total_shares: 0,
+            reward_paid_at: UnorderedMap::new(b"d".to_vec()),
+            staking_reward_enabled_at: env::block_timestamp(),
         };
         let mut account = ft.get_account(&owner_id);
         account.balance = total_supply;
         ft.accounts.insert(&owner_id, &account);
         ft
+    }
+
+    pub fn refresh_reward(&mut self) -> bool {
+        let account_id = env::signer_account_id();
+        let staked = self.get_staked_balance(account_id.clone());
+        let staked = u128::from_str(&staked).unwrap();
+
+        if staked == 0 {
+            return false;
+        }
+        let mut reward_paid_at = self
+            .reward_paid_at
+            .get(&account_id)
+            .unwrap_or(self.staking_reward_enabled_at);
+        let now = env::block_timestamp();
+        let mut new_staked = staked;
+        let mut days = (now - reward_paid_at) / (24 * 60 * 60 * 1000000000);
+        if days == 0 {
+            return false;
+        }
+        reward_paid_at += days * (24 * 60 * 60 * 1000000000);
+        if days > 365 {
+            new_staked =
+                (Ratio::new(new_staked, 1) * YEAR_INTEREST.pow((days / 365) as i32)).to_integer();
+            days %= 365;
+        }
+        if days > 30 {
+            new_staked =
+                (Ratio::new(new_staked, 1) * MONTH_INTEREST.pow((days / 30) as i32)).to_integer();
+            days %= 30;
+        }
+        if days > 0 {
+            new_staked = (Ratio::new(new_staked, 1) * DAY_INTEREST.pow(days as i32)).to_integer();
+        }
+        let mut account = self.get_account(&account_id);
+        account.staked_balance = new_staked;
+        self.accounts.insert(&account_id, &account);
+        self.reward_paid_at.insert(&account_id, &reward_paid_at);
+        return true;
     }
 
     #[payable]
@@ -307,9 +350,12 @@ impl Art {
         account.balance -= stake_amount;
 
         // Updating total stake balance
+        self.refresh_reward();
         let staked_balance = account.get_staked_balance();
         account.set_staked_balance(staked_balance + stake_amount);
         self.total_staked += stake_amount;
+        self.reward_paid_at
+            .insert(&account_id, &env::block_timestamp());
 
         self.accounts.insert(&account_id, &account);
         stake_amount
@@ -328,6 +374,7 @@ impl Art {
         let mut account = self.get_account(&account_id);
 
         // Checking and updating staked balance
+        self.refresh_reward();
         let staked_balance = account.get_staked_balance();
         if staked_balance < unstake_amount {
             env::panic(b"Not enough staked tokens");
@@ -398,12 +445,16 @@ impl Art {
 
     /// Returns current allowance for the `owner_id` to be able to use by `escrow_account_id`.
     pub fn get_allowance(&self, owner_id: AccountId, escrow_account_id: AccountId) -> String {
-        self.get_account(&owner_id).get_allowance(&escrow_account_id).to_string()
+        self.get_account(&owner_id)
+            .get_allowance(&escrow_account_id)
+            .to_string()
     }
 
     /// Returns current staked balance for the `owner_id` staked by `escrow_account_id`.
     pub fn get_staked_balance(&self, account_id: AccountId) -> String {
-        self.get_account(&account_id).get_staked_balance().to_string()
+        self.get_account(&account_id)
+            .get_staked_balance()
+            .to_string()
     }
 
     pub fn get_price(&self) -> String {
@@ -417,8 +468,6 @@ impl Art {
     pub fn get_asset_balance(&self, account_id: AccountId, asset: String) -> String {
         self._get_asset_balance(&account_id, &asset).to_string()
     }
-
-    fn maybe_stake_reward(&self) {}
 }
 
 impl Art {
@@ -432,7 +481,11 @@ impl Art {
     }
 
     fn _get_asset_balance(&self, account_id: &AccountId, asset: &String) -> Balance {
-        *self.get_account(&account_id).assets.get(asset).unwrap_or(&0)
+        *self
+            .get_account(&account_id)
+            .assets
+            .get(asset)
+            .unwrap_or(&0)
     }
 }
 
@@ -482,7 +535,10 @@ mod tests {
         let total_supply = 1_000_000_000_000_000u128;
         let contract = Art::new(bob(), total_supply.to_string(), "ausd".to_string());
         assert_eq!(contract.get_total_supply(), total_supply.to_string());
-        assert_eq!(contract.get_unstaked_balance(bob()), total_supply.to_string());
+        assert_eq!(
+            contract.get_unstaked_balance(bob()),
+            total_supply.to_string()
+        );
         assert_eq!(contract.get_total_balance(bob()), total_supply.to_string());
     }
 
@@ -498,7 +554,10 @@ mod tests {
             contract.get_unstaked_balance(carol()),
             (total_supply - transfer_amount).to_string()
         );
-        assert_eq!(contract.get_unstaked_balance(bob()), transfer_amount.to_string());
+        assert_eq!(
+            contract.get_unstaked_balance(bob()),
+            transfer_amount.to_string()
+        );
     }
 
     #[test]
@@ -536,7 +595,10 @@ mod tests {
         let allowance = total_supply / 3;
         let transfer_amount = allowance / 3;
         contract.set_allowance(bob(), format!("{}", allowance));
-        assert_eq!(contract.get_allowance(carol(), bob()), format!("{}", allowance));
+        assert_eq!(
+            contract.get_allowance(carol(), bob()),
+            format!("{}", allowance)
+        );
         // Acting as bob now
         testing_env!(get_context(bob()));
         contract.transfer_from(carol(), alice(), transfer_amount.to_string());
@@ -544,7 +606,10 @@ mod tests {
             contract.get_total_balance(carol()),
             (total_supply - transfer_amount).to_string()
         );
-        assert_eq!(contract.get_unstaked_balance(alice()), transfer_amount.to_string());
+        assert_eq!(
+            contract.get_unstaked_balance(alice()),
+            transfer_amount.to_string()
+        );
         assert_eq!(
             contract.get_allowance(carol(), bob()),
             format!("{}", allowance - transfer_amount)
