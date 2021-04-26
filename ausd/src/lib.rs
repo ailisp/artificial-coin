@@ -45,7 +45,11 @@ pub struct Account {
 impl Account {
     /// Initializes a new Account with 0 balance and no allowances for a given `account_hash`.
     pub fn new(account_hash: Vec<u8>) -> Self {
-        Self { balance: 0, allowances: LookupMap::new(account_hash), num_allowances: 0 }
+        Self {
+            balance: 0,
+            allowances: LookupMap::new(account_hash),
+            num_allowances: 0,
+        }
     }
 
     /// Sets allowance for account `escrow_account_id` to `allowance`.
@@ -129,7 +133,10 @@ impl AUSD {
         }
         let mut account = self.get_account(&owner_id);
         let current_allowance = account.get_allowance(&escrow_account_id);
-        account.set_allowance(&escrow_account_id, current_allowance.saturating_add(amount.0));
+        account.set_allowance(
+            &escrow_account_id,
+            current_allowance.saturating_add(amount.0),
+        );
         self.set_account(&owner_id, &account);
         self.refund_storage(initial_storage);
     }
@@ -152,7 +159,10 @@ impl AUSD {
         }
         let mut account = self.get_account(&owner_id);
         let current_allowance = account.get_allowance(&escrow_account_id);
-        account.set_allowance(&escrow_account_id, current_allowance.saturating_sub(amount.0));
+        account.set_allowance(
+            &escrow_account_id,
+            current_allowance.saturating_sub(amount.0),
+        );
         self.set_account(&owner_id, &account);
         self.refund_storage(initial_storage);
     }
@@ -244,7 +254,9 @@ impl AUSD {
             env::is_valid_account_id(escrow_account_id.as_bytes()),
             "Escrow account ID is invalid"
         );
-        self.get_account(&owner_id).get_allowance(&escrow_account_id).into()
+        self.get_account(&owner_id)
+            .get_allowance(&escrow_account_id)
+            .into()
     }
 
     pub fn mint(&mut self, amount: u128) -> u128 {
@@ -258,7 +270,6 @@ impl AUSD {
         account.balance += amount;
         self.total_supply += amount;
         env::log(&self.total_supply.to_string().as_bytes());
-
         self.set_account(&account_id, &account);
         amount
     }
@@ -293,7 +304,13 @@ impl AUSD {
         asset_amount: u128,
     ) -> Promise {
         self.burn(burn_amount);
-        ext_gov::buy_asset_callback(asset, asset_amount, &self.art_token, 0, env::prepaid_gas() / 3)
+        ext_gov::buy_asset_callback(
+            asset,
+            asset_amount,
+            &self.art_token,
+            0,
+            env::prepaid_gas() / 3,
+        )
     }
 
     pub fn buy_ausd(&mut self, new_owner_id: AccountId, amount: U128) {
@@ -315,9 +332,14 @@ impl AUSD {
 impl AUSD {
     /// Helper method to get the account details for `owner_id`.
     fn get_account(&self, owner_id: &AccountId) -> Account {
-        assert!(env::is_valid_account_id(owner_id.as_bytes()), "Owner's account ID is invalid");
+        assert!(
+            env::is_valid_account_id(owner_id.as_bytes()),
+            "Owner's account ID is invalid"
+        );
         let account_hash = env::sha256(owner_id.as_bytes());
-        self.accounts.get(&account_hash).unwrap_or_else(|| Account::new(account_hash))
+        self.accounts
+            .get(&account_hash)
+            .unwrap_or_else(|| Account::new(account_hash))
     }
 
     /// Helper method to set the account details for `owner_id` to the state.
@@ -428,7 +450,10 @@ mod tests {
         context.is_view = true;
         context.attached_deposit = 0;
         testing_env!(context.clone());
-        assert_eq!(contract.get_balance(carol()).0, (total_supply - transfer_amount));
+        assert_eq!(
+            contract.get_balance(carol()).0,
+            (total_supply - transfer_amount)
+        );
         assert_eq!(contract.get_balance(bob()).0, transfer_amount);
     }
 
@@ -493,7 +518,10 @@ mod tests {
         testing_env!(context.clone());
         contract.inc_allowance(bob(), total_supply.into());
         contract.inc_allowance(bob(), total_supply.into());
-        assert_eq!(contract.get_allowance(carol(), bob()), std::u128::MAX.into())
+        assert_eq!(
+            contract.get_allowance(carol(), bob()),
+            std::u128::MAX.into()
+        )
     }
 
     #[test]
@@ -549,9 +577,15 @@ mod tests {
         context.is_view = true;
         context.attached_deposit = 0;
         testing_env!(context.clone());
-        assert_eq!(contract.get_balance(carol()).0, total_supply - transfer_amount);
+        assert_eq!(
+            contract.get_balance(carol()).0,
+            total_supply - transfer_amount
+        );
         assert_eq!(contract.get_balance(alice()).0, transfer_amount);
-        assert_eq!(contract.get_allowance(carol(), bob()).0, allowance - transfer_amount);
+        assert_eq!(
+            contract.get_allowance(carol(), bob()).0,
+            allowance - transfer_amount
+        );
     }
 
     #[test]
@@ -594,9 +628,15 @@ mod tests {
         context.is_view = true;
         context.attached_deposit = 0;
         testing_env!(context.clone());
-        assert_eq!(contract.get_balance(carol()).0, (total_supply - transfer_amount));
+        assert_eq!(
+            contract.get_balance(carol()).0,
+            (total_supply - transfer_amount)
+        );
         assert_eq!(contract.get_balance(alice()).0, transfer_amount);
-        assert_eq!(contract.get_allowance(carol(), bob()).0, allowance - transfer_amount);
+        assert_eq!(
+            contract.get_allowance(carol(), bob()).0,
+            allowance - transfer_amount
+        );
     }
 
     #[test]

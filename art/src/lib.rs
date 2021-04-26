@@ -12,9 +12,154 @@ use std::str::FromStr;
 #[global_allocator]
 static ALLOC: near_sdk::wee_alloc::WeeAlloc<'_> = near_sdk::wee_alloc::WeeAlloc::INIT;
 
-pub const DAY_INTEREST: Ratio<u128> = Ratio::new_raw(1000261157876068, 1000000000000000);
-pub const MONTH_INTEREST: Ratio<u128> = Ratio::new_raw(1007864477220626, 1000000000000000);
-pub const YEAR_INTEREST: Ratio<u128> = Ratio::new_raw(11, 10);
+pub const DAY_INTEREST: [Ratio<u128>; 30] = [
+    Ratio::new_raw(1000000, 1000000),
+    Ratio::new_raw(1000261, 1000000),
+    Ratio::new_raw(1000522, 1000000),
+    Ratio::new_raw(1000783, 1000000),
+    Ratio::new_raw(1001045, 1000000),
+    Ratio::new_raw(1001306, 1000000),
+    Ratio::new_raw(1001567, 1000000),
+    Ratio::new_raw(1001829, 1000000),
+    Ratio::new_raw(1002091, 1000000),
+    Ratio::new_raw(1002352, 1000000),
+    Ratio::new_raw(1002614, 1000000),
+    Ratio::new_raw(1002876, 1000000),
+    Ratio::new_raw(1003138, 1000000),
+    Ratio::new_raw(1003400, 1000000),
+    Ratio::new_raw(1003662, 1000000),
+    Ratio::new_raw(1003924, 1000000),
+    Ratio::new_raw(1004186, 1000000),
+    Ratio::new_raw(1004448, 1000000),
+    Ratio::new_raw(1004711, 1000000),
+    Ratio::new_raw(1004973, 1000000),
+    Ratio::new_raw(1005236, 1000000),
+    Ratio::new_raw(1005498, 1000000),
+    Ratio::new_raw(1005761, 1000000),
+    Ratio::new_raw(1006023, 1000000),
+    Ratio::new_raw(1006286, 1000000),
+    Ratio::new_raw(1006549, 1000000),
+    Ratio::new_raw(1006812, 1000000),
+    Ratio::new_raw(1007075, 1000000),
+    Ratio::new_raw(1007338, 1000000),
+    Ratio::new_raw(1007601, 1000000),
+];
+const MONTH_INTEREST: [Ratio<u128>; 12] = [
+    Ratio::new_raw(1000000, 1000000),
+    Ratio::new_raw(1007864, 1000000),
+    Ratio::new_raw(1015790, 1000000),
+    Ratio::new_raw(1023779, 1000000),
+    Ratio::new_raw(1031830, 1000000),
+    Ratio::new_raw(1039945, 1000000),
+    Ratio::new_raw(1048124, 1000000),
+    Ratio::new_raw(1056367, 1000000),
+    Ratio::new_raw(1064675, 1000000),
+    Ratio::new_raw(1073048, 1000000),
+    Ratio::new_raw(1081487, 1000000),
+    Ratio::new_raw(1089992, 1000000),
+];
+const YEAR_INTEREST: [Ratio<u128>; 100] = [
+    Ratio::new_raw(1000000, 1000000),
+    Ratio::new_raw(1100000, 1000000),
+    Ratio::new_raw(1210000, 1000000),
+    Ratio::new_raw(1331000, 1000000),
+    Ratio::new_raw(1464100, 1000000),
+    Ratio::new_raw(1610510, 1000000),
+    Ratio::new_raw(1771561, 1000000),
+    Ratio::new_raw(1948717, 1000000),
+    Ratio::new_raw(2143588, 1000000),
+    Ratio::new_raw(2357947, 1000000),
+    Ratio::new_raw(2593742, 1000000),
+    Ratio::new_raw(2853116, 1000000),
+    Ratio::new_raw(3138428, 1000000),
+    Ratio::new_raw(3452271, 1000000),
+    Ratio::new_raw(3797498, 1000000),
+    Ratio::new_raw(4177248, 1000000),
+    Ratio::new_raw(4594972, 1000000),
+    Ratio::new_raw(5054470, 1000000),
+    Ratio::new_raw(5559917, 1000000),
+    Ratio::new_raw(6115909, 1000000),
+    Ratio::new_raw(6727499, 1000000),
+    Ratio::new_raw(7400249, 1000000),
+    Ratio::new_raw(8140274, 1000000),
+    Ratio::new_raw(8954302, 1000000),
+    Ratio::new_raw(9849732, 1000000),
+    Ratio::new_raw(10834705, 1000000),
+    Ratio::new_raw(11918176, 1000000),
+    Ratio::new_raw(13109994, 1000000),
+    Ratio::new_raw(14420993, 1000000),
+    Ratio::new_raw(15863092, 1000000),
+    Ratio::new_raw(17449402, 1000000),
+    Ratio::new_raw(19194342, 1000000),
+    Ratio::new_raw(21113776, 1000000),
+    Ratio::new_raw(23225154, 1000000),
+    Ratio::new_raw(25547669, 1000000),
+    Ratio::new_raw(28102436, 1000000),
+    Ratio::new_raw(30912680, 1000000),
+    Ratio::new_raw(34003948, 1000000),
+    Ratio::new_raw(37404343, 1000000),
+    Ratio::new_raw(41144777, 1000000),
+    Ratio::new_raw(45259255, 1000000),
+    Ratio::new_raw(49785181, 1000000),
+    Ratio::new_raw(54763699, 1000000),
+    Ratio::new_raw(60240069, 1000000),
+    Ratio::new_raw(66264076, 1000000),
+    Ratio::new_raw(72890483, 1000000),
+    Ratio::new_raw(80179532, 1000000),
+    Ratio::new_raw(88197485, 1000000),
+    Ratio::new_raw(97017233, 1000000),
+    Ratio::new_raw(106718957, 1000000),
+    Ratio::new_raw(117390852, 1000000),
+    Ratio::new_raw(129129938, 1000000),
+    Ratio::new_raw(142042931, 1000000),
+    Ratio::new_raw(156247225, 1000000),
+    Ratio::new_raw(171871947, 1000000),
+    Ratio::new_raw(189059142, 1000000),
+    Ratio::new_raw(207965056, 1000000),
+    Ratio::new_raw(228761562, 1000000),
+    Ratio::new_raw(251637718, 1000000),
+    Ratio::new_raw(276801490, 1000000),
+    Ratio::new_raw(304481639, 1000000),
+    Ratio::new_raw(334929803, 1000000),
+    Ratio::new_raw(368422783, 1000000),
+    Ratio::new_raw(405265062, 1000000),
+    Ratio::new_raw(445791568, 1000000),
+    Ratio::new_raw(490370725, 1000000),
+    Ratio::new_raw(539407797, 1000000),
+    Ratio::new_raw(593348577, 1000000),
+    Ratio::new_raw(652683435, 1000000),
+    Ratio::new_raw(717951778, 1000000),
+    Ratio::new_raw(789746956, 1000000),
+    Ratio::new_raw(868721652, 1000000),
+    Ratio::new_raw(955593817, 1000000),
+    Ratio::new_raw(1051153199, 1000000),
+    Ratio::new_raw(1156268519, 1000000),
+    Ratio::new_raw(1271895371, 1000000),
+    Ratio::new_raw(1399084908, 1000000),
+    Ratio::new_raw(1538993399, 1000000),
+    Ratio::new_raw(1692892739, 1000000),
+    Ratio::new_raw(1862182013, 1000000),
+    Ratio::new_raw(2048400214, 1000000),
+    Ratio::new_raw(2253240236, 1000000),
+    Ratio::new_raw(2478564259, 1000000),
+    Ratio::new_raw(2726420685, 1000000),
+    Ratio::new_raw(2999062754, 1000000),
+    Ratio::new_raw(3298969029, 1000000),
+    Ratio::new_raw(3628865932, 1000000),
+    Ratio::new_raw(3991752525, 1000000),
+    Ratio::new_raw(4390927778, 1000000),
+    Ratio::new_raw(4830020556, 1000000),
+    Ratio::new_raw(5313022611, 1000000),
+    Ratio::new_raw(5844324873, 1000000),
+    Ratio::new_raw(6428757360, 1000000),
+    Ratio::new_raw(7071633096, 1000000),
+    Ratio::new_raw(7778796406, 1000000),
+    Ratio::new_raw(8556676046, 1000000),
+    Ratio::new_raw(9412343651, 1000000),
+    Ratio::new_raw(10353578016, 1000000),
+    Ratio::new_raw(11388935818, 1000000),
+    Ratio::new_raw(12527829399, 1000000),
+];
 
 #[derive(Default, BorshDeserialize, BorshSerialize)]
 pub struct Account {
@@ -126,11 +271,14 @@ impl Art {
     }
 
     pub fn refresh_reward(&mut self) -> bool {
+        log!("refresh_reward");
         let account_id = env::signer_account_id();
         let staked = self.get_staked_balance(account_id.clone());
         let staked = u128::from_str(&staked).unwrap();
+        let mut account = self.get_account(&account_id);
 
         if staked == 0 {
+            env::log(b"no token was staked");
             return false;
         }
         let mut reward_paid_at = self
@@ -141,24 +289,31 @@ impl Art {
         let mut new_staked = staked;
         let mut days = (now - reward_paid_at) / (24 * 60 * 60 * 1000000000);
         if days == 0 {
+            env::log(b"not been a day since last reward_paid_at");
             return false;
         }
         reward_paid_at += days * (24 * 60 * 60 * 1000000000);
         if days > 365 {
-            new_staked =
-                (Ratio::new(new_staked, 1) * YEAR_INTEREST.pow((days / 365) as i32)).to_integer();
+            let mut r = Ratio::new(new_staked, 1);
+            r *= YEAR_INTEREST[(days / 365) as usize];
+            new_staked = r.to_integer();
             days %= 365;
         }
         if days > 30 {
-            new_staked =
-                (Ratio::new(new_staked, 1) * MONTH_INTEREST.pow((days / 30) as i32)).to_integer();
+            let mut r = Ratio::new(new_staked, 1);
+            r *= MONTH_INTEREST[(days / 30) as usize];
+            new_staked = r.to_integer();
             days %= 30;
         }
         if days > 0 {
-            new_staked = (Ratio::new(new_staked, 1) * DAY_INTEREST.pow(days as i32)).to_integer();
+            let mut r = Ratio::new(new_staked, 1);
+            r *= DAY_INTEREST[days as usize];
+            new_staked = r.to_integer();
         }
-        let mut account = self.get_account(&account_id);
+        log!("refresh_reward {} {}", account.staked_balance, new_staked);
         account.staked_balance = new_staked;
+        self.total_supply += new_staked - staked;
+        self.total_staked += new_staked - staked;
         self.accounts.insert(&account_id, &account);
         self.reward_paid_at.insert(&account_id, &reward_paid_at);
         return true;
@@ -340,6 +495,7 @@ impl Art {
         if stake_amount == 0 {
             env::panic(b"Can't stake 0 tokens");
         }
+        self.refresh_reward();
         let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
 
@@ -350,7 +506,6 @@ impl Art {
         account.balance -= stake_amount;
 
         // Updating total stake balance
-        self.refresh_reward();
         let staked_balance = account.get_staked_balance();
         account.set_staked_balance(staked_balance + stake_amount);
         self.total_staked += stake_amount;
@@ -370,11 +525,12 @@ impl Art {
         if unstake_amount == 0 {
             env::panic(b"Can't unstake 0 tokens");
         }
+        self.refresh_reward();
+
         let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
 
         // Checking and updating staked balance
-        self.refresh_reward();
         let staked_balance = account.get_staked_balance();
         if staked_balance < unstake_amount {
             env::panic(b"Not enough staked tokens");
@@ -467,6 +623,12 @@ impl Art {
 
     pub fn get_asset_balance(&self, account_id: AccountId, asset: String) -> String {
         self._get_asset_balance(&account_id, &asset).to_string()
+    }
+
+    pub fn get_reward_paid_at(&self, account_id: AccountId) -> u64 {
+        self.reward_paid_at
+            .get(&account_id)
+            .unwrap_or(self.staking_reward_enabled_at)
     }
 }
 
