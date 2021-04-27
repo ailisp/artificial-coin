@@ -1,7 +1,11 @@
+use near_contract_standards::fungible_token::metadata::{
+    FungibleTokenMetadata, FungibleTokenMetadataProvider, FT_METADATA_SPEC,
+};
 use near_sdk::collections::UnorderedMap;
 use near_sdk::{
     borsh::{self, BorshDeserialize, BorshSerialize},
     json_types::U128,
+    Gas, StorageUsage,
 };
 use near_sdk::{env, ext_contract, log, near_bindgen, AccountId, Balance, Promise};
 use num_rational::Ratio;
@@ -699,6 +703,65 @@ impl Art {
             .assets
             .get(asset)
             .unwrap_or(&0)
+    }
+}
+
+#[ext_contract(ext_self)]
+trait FungibleTokenResolver {
+    fn ft_resolve_transfer(
+        &mut self,
+        sender_id: AccountId,
+        receiver_id: AccountId,
+        amount: U128,
+    ) -> U128;
+}
+
+#[ext_contract(ext_fungible_token_receiver)]
+pub trait FungibleTokenReceiver {
+    fn ft_on_transfer(
+        &mut self,
+        sender_id: AccountId,
+        amount: U128,
+        msg: String,
+    ) -> PromiseOrValue<U128>;
+}
+
+#[ext_contract(ext_fungible_token)]
+pub trait FungibleTokenContract {
+    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
+
+    fn ft_transfer_call(
+        &mut self,
+        receiver_id: AccountId,
+        amount: U128,
+        memo: Option<String>,
+        msg: String,
+    ) -> PromiseOrValue<U128>;
+
+    /// Returns the total supply of the token in a decimal string representation.
+    fn ft_total_supply(&self) -> U128;
+
+    /// Returns the balance of the account. If the account doesn't exist must returns `"0"`.
+    fn ft_balance_of(&self, account_id: AccountId) -> U128;
+}
+
+const GAS_FOR_RESOLVE_TRANSFER: Gas = 5_000_000_000_000;
+const GAS_FOR_FT_TRANSFER_CALL: Gas = 25_000_000_000_000 + GAS_FOR_RESOLVE_TRANSFER;
+
+const NO_DEPOSIT: Balance = 0;
+
+#[near_bindgen]
+impl FungibleTokenMetadataProvider for Art {
+    fn ft_metadata(&self) -> FungibleTokenMetadata {
+        FungibleTokenMetadata {
+            spec: FT_METADATA_SPEC.to_string(),
+            name: "Artificial Coin".to_string(),
+            symbol: "art".to_string(),
+            icon: Some("https://artcoin.network/static/media/logo192.c7f41b7c.png".to_string()),
+            decimals: 24,
+            reference: None,
+            reference_hash: None,
+        }
     }
 }
 

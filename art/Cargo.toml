@@ -9,6 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 near-sdk = { git = "https://github.com/near/near-sdk-rs.git", rev="cab8e84fdfed3cc6b82b369cafca2e8451f7485d" }
+near-contract-standards = { git = "https://github.com/near/near-sdk-rs.git", rev="cab8e84fdfed3cc6b82b369cafca2e8451f7485d" }
 num-rational = "0.4"
 
 [dev-dependencies]
