@@ -533,3 +533,58 @@ fn test_staking_reward() {
 
     assert_eq!(10277963087960000000000000000u128, bob_staked_art_balance);
 }
+
+#[test]
+fn test_exchange_art_ausd() {
+    let mut genesis = GenesisConfig::default();
+    genesis.block_time = 3600 * 1000000000;
+    let (master_account, art, ausd) = init(Some(genesis));
+    let stake_amount = (to_yocto(INIT_ART_BALANCE) / 2).to_string();
+    call!(
+        master_account,
+        art.submit_price("2000000000".to_string()), // every art is $20
+        gas = DEFAULT_GAS
+    )
+    .assert_success();
+    call!(master_account, art.stake_and_mint(stake_amount)).assert_success();
+
+    let alice = master_account.create_user("alice".to_string(), to_yocto("10"));
+    call!(
+        master_account,
+        art.transfer(alice.account_id(), to_yocto("30000").to_string())
+    )
+    .assert_success();
+
+    call!(
+        alice,
+        art.exchange_art_to_ausd(to_yocto("10000").to_string())
+    )
+    .assert_success();
+    let alice_unstaked_art_balance: String =
+        view!(art.get_unstaked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(alice_unstaked_art_balance, to_yocto("20000").to_string());
+    let alice_ausd_balance: U128 =
+        view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(
+        U128(to_yocto("10000") * 20 / 1000 * 997),
+        alice_ausd_balance
+    );
+
+    call!(
+        alice,
+        art.exchange_ausd_to_art(to_yocto("20000").to_string())
+    )
+    .assert_success();
+    let alice_ausd_balance: U128 =
+        view!(ausd.get_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(
+        U128(to_yocto("10000") * 20 / 1000 * 997 - to_yocto("20000")),
+        alice_ausd_balance
+    );
+    let alice_unstaked_art_balance: String =
+        view!(art.get_unstaked_balance(alice.account_id().try_into().unwrap())).unwrap_json();
+    assert_eq!(
+        alice_unstaked_art_balance,
+        (to_yocto("20000") + to_yocto("20000") / 20 / 1000 * 997).to_string()
+    );
+}

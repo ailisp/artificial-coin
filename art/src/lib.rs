@@ -209,6 +209,7 @@ pub trait ExtAUSDContract {
         asset_amount: u128,
     ) -> Promise;
     fn buy_ausd(&mut self, new_owner_id: AccountId, amount: U128);
+    fn sell_ausd(&mut self, seller_id: AccountId, amount: U128);
 }
 
 #[near_bindgen]
@@ -344,6 +345,56 @@ impl Art {
 
         self.accounts.insert(&self.owner, &owner);
         self.accounts.insert(&account_id, &account);
+    }
+
+    pub fn exchange_art_to_ausd(&mut self, amount: String) -> Promise {
+        if self.price == 0 {
+            // Not received any data from oracle
+            env::panic(b"No price data from oracle");
+        }
+        let amount = u128::from_str(&amount).expect("Failed to parse amount");
+
+        let unit_price = Ratio::new(self.price, 100_000_000);
+        let ausd_amount = (unit_price * amount * Ratio::new(997, 1000)).to_integer();
+        let account_id = env::signer_account_id();
+        let mut owner = self.get_account(&self.owner);
+        let mut account = self.get_account(&account_id);
+        account.balance = account.balance.checked_sub(amount).unwrap();
+        owner.balance = owner.balance.checked_add(amount).unwrap();
+        self.accounts.insert(&self.owner, &owner);
+        self.accounts.insert(&account_id, &account);
+        ext_usd::buy_ausd(
+            account_id,
+            U128(ausd_amount),
+            &self.ausd_token,
+            0,
+            env::prepaid_gas() / 2,
+        )
+    }
+
+    pub fn exchange_ausd_to_art(&mut self, ausd_amount: String) -> Promise {
+        if self.price == 0 {
+            // Not received any data from oracle
+            env::panic(b"No price data from oracle");
+        }
+        let unit_price = Ratio::new(self.price, 100_000_000);
+        let ausd_amount = u128::from_str(&ausd_amount).expect("Failed to parse ausd_amount");
+        let amount = (Ratio::new(997, 1000) * ausd_amount / unit_price).to_integer();
+        let account_id = env::signer_account_id();
+        let mut owner = self.get_account(&self.owner);
+        let mut account = self.get_account(&account_id);
+        account.balance = account.balance.checked_add(amount).unwrap();
+        owner.balance = owner.balance.checked_sub(amount).unwrap();
+        self.accounts.insert(&self.owner, &owner);
+        self.accounts.insert(&account_id, &account);
+
+        ext_usd::sell_ausd(
+            account_id,
+            U128(ausd_amount),
+            &self.ausd_token,
+            0,
+            env::prepaid_gas() / 2,
+        )
     }
 
     #[payable]

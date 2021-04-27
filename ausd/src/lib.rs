@@ -327,6 +327,21 @@ impl AUSD {
         self.set_account(&new_owner_id, &account);
         self.set_account(&contract_owner_id, &owner);
     }
+
+    pub fn sell_ausd(&mut self, seller_id: AccountId, amount: U128) {
+        assert!(
+            env::predecessor_account_id() == self.art_token,
+            "Only allow buy ausd originated from governance token"
+        );
+        let mut account = self.get_account(&seller_id);
+        account.balance = account.balance.checked_sub(amount.0).unwrap();
+        let contract_owner_id = self.owner_id.clone();
+        let mut owner = self.get_account(&contract_owner_id);
+        owner.balance = owner.balance.checked_add(amount.0).unwrap();
+
+        self.set_account(&seller_id, &account);
+        self.set_account(&contract_owner_id, &owner);
+    }
 }
 
 impl AUSD {
