@@ -209,10 +209,16 @@ impl Account {
 
 #[ext_contract(ext_usd)]
 pub trait ExtAUSDContract {
-    fn mint(&mut self, amount: u128) -> u128;
-    fn burn_to_unstake(&mut self, burn_amount: u128, unstake_amount: u128) -> Promise;
+    fn mint(&mut self, account_id: String, amount: u128) -> u128;
+    fn burn_to_unstake(
+        &mut self,
+        account_id: String,
+        burn_amount: u128,
+        unstake_amount: u128,
+    ) -> Promise;
     fn burn_to_buy_asset(
         &mut self,
+        account_id: String,
         burn_amount: u128,
         asset: String,
         asset_amount: u128,
@@ -295,7 +301,7 @@ impl Art {
 
     pub fn refresh_reward(&mut self) -> bool {
         log!("refresh_reward");
-        let account_id = env::signer_account_id();
+        let account_id = env::predecessor_account_id();
         let staked = self.get_staked_balance(account_id.clone());
         let staked = u128::from_str(&staked).unwrap();
         let mut account = self.get_account(&account_id);
@@ -348,7 +354,7 @@ impl Art {
         if attached_deposit == 0 {
             env::panic(b"Can't buy with 0 NEAR");
         }
-        let account_id = env::signer_account_id();
+        let account_id = env::predecessor_account_id();
         let mut account = self.get_account(&account_id);
         let near_price = self._get_asset_price(&"aNEAR".to_string());
         if near_price == 0 {
@@ -378,7 +384,7 @@ impl Art {
 
         let unit_price = Ratio::new(self.price, 100_000_000);
         let ausd_amount = (unit_price * amount * Ratio::new(997, 1000)).to_integer();
-        let account_id = env::signer_account_id();
+        let account_id = env::predecessor_account_id();
         let mut owner = self.get_account(&self.owner);
         let mut account = self.get_account(&account_id);
         account.balance = account.balance.checked_sub(amount).unwrap();
@@ -402,7 +408,7 @@ impl Art {
         let unit_price = Ratio::new(self.price, 100_000_000);
         let ausd_amount = u128::from_str(&ausd_amount).expect("Failed to parse ausd_amount");
         let amount = (Ratio::new(997, 1000) * ausd_amount / unit_price).to_integer();
-        let account_id = env::signer_account_id();
+        let account_id = env::predecessor_account_id();
         let mut owner = self.get_account(&self.owner);
         let mut account = self.get_account(&account_id);
         account.balance = account.balance.checked_add(amount).unwrap();
@@ -425,7 +431,7 @@ impl Art {
         if attached_deposit == 0 {
             env::panic(b"Can't buy with 0 NEAR");
         }
-        let account_id = env::signer_account_id();
+        let account_id = env::predecessor_account_id();
         let near_price = self._get_asset_price(&"aNEAR".to_string());
         if near_price == 0 {
             env::panic(b"No NEAR price data from oracle");
@@ -485,7 +491,14 @@ impl Art {
         let unit_price = Ratio::new(self.price, 100_000_000);
         let mint_amount = Ratio::new(stake_amount, 5) * unit_price;
         let mint_amount = mint_amount.to_integer();
-        ext_usd::mint(mint_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
+        let account_id = env::predecessor_account_id();
+        ext_usd::mint(
+            account_id,
+            mint_amount,
+            &self.ausd_token,
+            0,
+            env::prepaid_gas() / 2,
+        )
     }
 
     pub fn burn_to_unstake(&mut self, unstake_amount: String) -> Promise {
@@ -496,10 +509,12 @@ impl Art {
         let unstake_amount =
             u128::from_str(&unstake_amount).expect("Failed to parse unstake_amount");
 
+        let account_id = env::predecessor_account_id();
         let unit_price = Ratio::new(self.price, 100_000_000);
         let burn_amount = Ratio::new(unstake_amount, 5) * unit_price;
         let burn_amount = burn_amount.to_integer();
         ext_usd::burn_to_unstake(
+            account_id,
             burn_amount,
             unstake_amount,
             &self.ausd_token,
@@ -515,7 +530,7 @@ impl Art {
         }
         let asset_amount = u128::from_str(&asset_amount).expect("Failed to parse asset_amount");
 
-        let account_id = env::signer_account_id();
+        let account_id = env::predecessor_account_id();
         let mut account = self.get_account(&account_id);
         let balance = self._get_asset_balance(&account_id, &asset);
         let new_balance = balance.checked_sub(asset_amount).unwrap();
@@ -525,7 +540,13 @@ impl Art {
         let unit_price = Ratio::new(asset_price, 100_000_000);
         let mint_amount = unit_price * asset_amount;
         let mint_amount = mint_amount.to_integer();
-        ext_usd::mint(mint_amount, &self.ausd_token, 0, env::prepaid_gas() / 2)
+        ext_usd::mint(
+            account_id,
+            mint_amount,
+            &self.ausd_token,
+            0,
+            env::prepaid_gas() / 2,
+        )
     }
 
     pub fn buy_asset_with_ausd(&mut self, asset: String, asset_amount: String) -> Promise {
@@ -537,7 +558,9 @@ impl Art {
         let unit_price = Ratio::new(asset_price, 100_000_000);
         let burn_amount = unit_price * asset_amount;
         let burn_amount = burn_amount.to_integer();
+        let account_id = env::predecessor_account_id();
         ext_usd::burn_to_buy_asset(
+            account_id,
             burn_amount,
             asset.clone(),
             asset_amount,
@@ -547,12 +570,12 @@ impl Art {
         )
     }
 
-    pub fn buy_asset_callback(&mut self, asset: String, asset_amount: u128) {
+    pub fn buy_asset_callback(&mut self, account_id: String, asset: String, asset_amount: u128) {
         assert!(
             env::predecessor_account_id() == self.ausd_token,
             "Only allow unstake originated from ausd token"
         );
-        let account_id = env::signer_account_id();
+
         let mut account = self.get_account(&account_id);
         let balance = self._get_asset_balance(&account_id, &asset);
         let new_balance = balance.checked_add(asset_amount).unwrap();
@@ -569,7 +592,7 @@ impl Art {
             env::panic(b"Can't stake 0 tokens");
         }
         self.refresh_reward();
-        let account_id = env::signer_account_id();
+        let account_id = env::predecessor_account_id();
         let mut account = self.get_account(&account_id);
 
         // Checking and updating unstaked balance
@@ -590,7 +613,7 @@ impl Art {
     }
 
     /// Unstakes the `unstake_amount` from the owner
-    pub fn unstake(&mut self, unstake_amount: u128) {
+    pub fn unstake(&mut self, account_id: String, unstake_amount: u128) {
         assert!(
             env::predecessor_account_id() == self.ausd_token,
             "Only allow unstake originated from ausd token"
@@ -600,7 +623,6 @@ impl Art {
         }
         self.refresh_reward();
 
-        let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
 
         // Checking and updating staked balance
@@ -1091,6 +1113,8 @@ mod tests {
         let total_supply = 1_000_000_000_000_000u128;
         let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
         let transfer_amount = total_supply / 3;
+        let context = get_context(bob());
+        testing_env!(context);
         std::panic::catch_unwind(move || {
             contract.stake(transfer_amount.to_string());
         })

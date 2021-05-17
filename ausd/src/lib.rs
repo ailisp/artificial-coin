@@ -19,7 +19,7 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LookupMap;
 use near_sdk::json_types::U128;
 use near_sdk::{
-    env, ext_contract, log, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage,
+    env, ext_contract, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, StorageUsage,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -75,8 +75,8 @@ impl Account {
 
 #[ext_contract(ext_gov)]
 pub trait ExtArtContract {
-    fn unstake(&mut self, unstake_amount: u128) -> u128;
-    fn buy_asset_callback(&mut self, asset: String, asset_amount: u128);
+    fn unstake(&mut self, account_id: String, unstake_amount: u128) -> u128;
+    fn buy_asset_callback(&mut self, account_id: String, asset: String, asset_amount: u128);
 }
 
 #[near_bindgen]
@@ -259,12 +259,11 @@ impl AUSD {
             .into()
     }
 
-    pub fn mint(&mut self, amount: u128) -> u128 {
+    pub fn mint(&mut self, account_id: String, amount: u128) -> u128 {
         assert!(
             env::predecessor_account_id() == self.art_token,
             "Only allow mint originated from governance token"
         );
-        let account_id = env::signer_account_id();
         let mut account = self.get_account(&account_id);
         // env::log(&amount.to_string().as_bytes());
         account.balance += amount;
@@ -282,7 +281,7 @@ impl AUSD {
         if burn_amount == 0 {
             env::panic(b"Can't burn 0 tokens");
         }
-        let account_id = env::signer_account_id();
+        let account_id = env::predecessor_account_id();
         let mut account = self.get_account(&account_id);
         if account.balance < burn_amount {
             env::panic(b"Not enough balance to burn");
@@ -292,19 +291,32 @@ impl AUSD {
         self.set_account(&account_id, &account);
     }
 
-    pub fn burn_to_unstake(&mut self, burn_amount: u128, unstake_amount: u128) -> Promise {
+    pub fn burn_to_unstake(
+        &mut self,
+        account_id: String,
+        burn_amount: u128,
+        unstake_amount: u128,
+    ) -> Promise {
         self.burn(burn_amount);
-        ext_gov::unstake(unstake_amount, &self.art_token, 0, env::prepaid_gas() / 3)
+        ext_gov::unstake(
+            account_id,
+            unstake_amount,
+            &self.art_token,
+            0,
+            env::prepaid_gas() / 3,
+        )
     }
 
     pub fn burn_to_buy_asset(
         &mut self,
+        account_id: String,
         burn_amount: u128,
         asset: String,
         asset_amount: u128,
     ) -> Promise {
         self.burn(burn_amount);
         ext_gov::buy_asset_callback(
+            account_id,
             asset,
             asset_amount,
             &self.art_token,
