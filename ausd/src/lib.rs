@@ -273,7 +273,7 @@ impl AUSD {
         amount
     }
 
-    fn burn(&mut self, burn_amount: u128) {
+    fn burn(&mut self, account_id: String, burn_amount: u128) {
         assert!(
             env::predecessor_account_id() == self.art_token,
             "Only allow burn originated from governance token"
@@ -281,7 +281,6 @@ impl AUSD {
         if burn_amount == 0 {
             env::panic(b"Can't burn 0 tokens");
         }
-        let account_id = env::predecessor_account_id();
         let mut account = self.get_account(&account_id);
         if account.balance < burn_amount {
             env::panic(b"Not enough balance to burn");
@@ -297,7 +296,7 @@ impl AUSD {
         burn_amount: u128,
         unstake_amount: u128,
     ) -> Promise {
-        self.burn(burn_amount);
+        self.burn(account_id.clone(), burn_amount);
         ext_gov::unstake(
             account_id,
             unstake_amount,
@@ -314,7 +313,7 @@ impl AUSD {
         asset: String,
         asset_amount: u128,
     ) -> Promise {
-        self.burn(burn_amount);
+        self.burn(account_id.clone(), burn_amount);
         ext_gov::buy_asset_callback(
             account_id,
             asset,
