@@ -13,7 +13,9 @@ use near_sdk::{
     Gas, StorageUsage,
 };
 use near_sdk::{env, ext_contract, log, near_bindgen, AccountId, Balance, Promise, PromiseOrValue};
+use num_bigint::BigInt;
 use num_rational::Ratio;
+use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -364,8 +366,10 @@ impl Art {
         if art_price == 0 {
             env::panic(b"No price data from oracle");
         }
-        let art_amount = Ratio::new(near_price, art_price) * attached_deposit;
-        let art_amount = art_amount.to_integer();
+        let attached_deposit: BigInt = attached_deposit.into();
+        let art_amount: Ratio<BigInt> =
+            Ratio::<BigInt>::new(near_price.into(), art_price.into()) * attached_deposit;
+        let art_amount = art_amount.to_integer().to_u128().unwrap();
         let mut owner = self.get_account(&self.owner);
 
         account.balance = account.balance.checked_add(art_amount).unwrap();
@@ -382,8 +386,12 @@ impl Art {
         }
         let amount = u128::from_str(&amount).expect("Failed to parse amount");
 
-        let unit_price = Ratio::new(self.price, 100_000_000);
-        let ausd_amount = (unit_price * amount * Ratio::new(997, 1000)).to_integer();
+        let unit_price = Ratio::<BigInt>::new(self.price.into(), 100_000_000.into());
+        let amount_b: BigInt = amount.into();
+
+        let ausd_amount = unit_price * amount_b * Ratio::<BigInt>::new(997.into(), 1000.into());
+        let ausd_amount = ausd_amount.to_integer().to_u128().unwrap();
+
         let account_id = env::predecessor_account_id();
         let mut owner = self.get_account(&self.owner);
         let mut account = self.get_account(&account_id);
@@ -405,9 +413,13 @@ impl Art {
             // Not received any data from oracle
             env::panic(b"No price data from oracle");
         }
-        let unit_price = Ratio::new(self.price, 100_000_000);
+        let unit_price = Ratio::<BigInt>::new(self.price.into(), 100_000_000.into());
         let ausd_amount = u128::from_str(&ausd_amount).expect("Failed to parse ausd_amount");
-        let amount = (Ratio::new(997, 1000) * ausd_amount / unit_price).to_integer();
+        let ausd_amount_b: BigInt = ausd_amount.into();
+
+        let amount = Ratio::<BigInt>::new(997.into(), 1000.into()) * ausd_amount_b / unit_price;
+        let amount = amount.to_integer().to_u128().unwrap();
+
         let account_id = env::predecessor_account_id();
         let mut owner = self.get_account(&self.owner);
         let mut account = self.get_account(&account_id);
@@ -436,8 +448,10 @@ impl Art {
         if near_price == 0 {
             env::panic(b"No NEAR price data from oracle");
         }
-        let ausd_amount = Ratio::new(near_price, 100000000) * attached_deposit;
-        let ausd_amount = ausd_amount.to_integer();
+        let attached_deposit: BigInt = attached_deposit.into();
+        let ausd_amount: Ratio<BigInt> =
+            Ratio::<BigInt>::new(near_price.into(), 100000000.into()) * attached_deposit;
+        let ausd_amount = ausd_amount.to_integer().to_u128().unwrap();
         ext_usd::buy_ausd(
             account_id,
             U128(ausd_amount),
@@ -488,9 +502,12 @@ impl Art {
             env::panic(b"No price data from oracle");
         }
         let stake_amount = self.stake(stake);
-        let unit_price = Ratio::new(self.price, 100_000_000);
-        let mint_amount = Ratio::new(stake_amount, 5) * unit_price;
-        let mint_amount = mint_amount.to_integer();
+
+        let unit_price = Ratio::<BigInt>::new(self.price.into(), 100_000_000.into());
+
+        let mint_amount = Ratio::<BigInt>::new(stake_amount.into(), 5.into()) * unit_price;
+        let mint_amount = mint_amount.to_integer().to_u128().unwrap();
+
         let account_id = env::predecessor_account_id();
         ext_usd::mint(
             account_id,
@@ -510,9 +527,12 @@ impl Art {
             u128::from_str(&unstake_amount).expect("Failed to parse unstake_amount");
 
         let account_id = env::predecessor_account_id();
-        let unit_price = Ratio::new(self.price, 100_000_000);
-        let burn_amount = Ratio::new(unstake_amount, 5) * unit_price;
-        let burn_amount = burn_amount.to_integer();
+
+        let unit_price = Ratio::<BigInt>::new(self.price.into(), 100_000_000.into());
+
+        let burn_amount = Ratio::<BigInt>::new(unstake_amount.into(), 5.into()) * unit_price;
+        let burn_amount = burn_amount.to_integer().to_u128().unwrap();
+
         ext_usd::burn_to_unstake(
             account_id,
             burn_amount,
@@ -537,9 +557,12 @@ impl Art {
         account.assets.insert(asset.clone(), new_balance);
         self.accounts.insert(&account_id, &account);
 
-        let unit_price = Ratio::new(asset_price, 100_000_000);
-        let mint_amount = unit_price * asset_amount;
-        let mint_amount = mint_amount.to_integer();
+        let unit_price = Ratio::<BigInt>::new(asset_price.into(), 100_000_000.into());
+        let asset_amount: BigInt = asset_amount.into();
+
+        let mint_amount: Ratio<BigInt> = unit_price * asset_amount;
+        let mint_amount = mint_amount.to_integer().to_u128().unwrap();
+
         ext_usd::mint(
             account_id,
             mint_amount,
@@ -555,9 +578,12 @@ impl Art {
             env::panic(b"No price data from oracle");
         }
         let asset_amount = u128::from_str(&asset_amount).expect("Failed to parse asset_amount");
-        let unit_price = Ratio::new(asset_price, 100_000_000);
-        let burn_amount = unit_price * asset_amount;
-        let burn_amount = burn_amount.to_integer();
+        let unit_price = Ratio::<BigInt>::new(asset_price.into(), 100_000_000.into());
+        let asset_amount_b: BigInt = asset_amount.into();
+
+        let burn_amount: Ratio<BigInt> = unit_price * asset_amount_b;
+        let burn_amount = burn_amount.to_integer().to_u128().unwrap();
+
         let account_id = env::predecessor_account_id();
         ext_usd::burn_to_buy_asset(
             account_id,

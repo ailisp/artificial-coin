@@ -72,7 +72,9 @@ dependencies = [
  "near-contract-standards",
  "near-sdk",
  "near-sdk-sim",
+ "num-bigint 0.4.0",
  "num-rational 0.4.0",
+ "num-traits",
 ]
 
 [[package]]
