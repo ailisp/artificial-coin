@@ -293,6 +293,13 @@ impl Art {
         ft
     }
 
+    pub fn set_account_storage_usage(&mut self) {
+        if env::predecessor_account_id() != self.owner {
+            env::panic(b"Only owner can set account storage");
+        }
+        self.measure_account_storage_usage();
+    }
+
     fn measure_account_storage_usage(&mut self) {
         let initial_storage_usage = env::storage_usage();
         let tmp_account_id = "a".repeat(64);
