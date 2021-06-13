@@ -831,6 +831,7 @@ impl FungibleTokenMetadataProvider for Art {
     }
 }
 
+#[near_bindgen]
 impl StorageManagement for Art {
     // `registration_only` doesn't affect the implementation for vanilla fungible token.
     #[allow(unused_variables)]
@@ -1009,6 +1010,7 @@ impl Art {
     }
 }
 
+#[near_bindgen]
 impl FungibleTokenCore for Art {
     fn ft_transfer(&mut self, receiver_id: ValidAccountId, amount: U128, memo: Option<String>) {
         assert_one_yocto();
