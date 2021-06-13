@@ -258,6 +258,36 @@ pub struct Art {
 
     /// Staking reward enabled at timestamp, when this version of contract deployed
     pub staking_reward_enabled_at: u64,
+}
+
+#[derive(BorshDeserialize, BorshSerialize)]
+pub struct ArtV4 {
+    /// AccountID -> Account details.
+    pub accounts: UnorderedMap<AccountId, Account>,
+
+    /// Total supply of the all token, in yocto
+    pub total_supply: Balance,
+
+    /// Current price, each 10^8 art in USD
+    pub price: u128,
+
+    /// Owner ID
+    pub owner: AccountId,
+
+    /// USD token, only allow unstake originate from which
+    pub ausd_token: AccountId,
+
+    /// Total staked balance
+    pub total_staked: Balance,
+
+    // Asset Prices
+    pub asset_prices: UnorderedMap<String, u128>,
+
+    /// Stake rewards paid at per account
+    pub reward_paid_at: UnorderedMap<AccountId, u64>,
+
+    /// Staking reward enabled at timestamp, when this version of contract deployed
+    pub staking_reward_enabled_at: u64,
 
     /// The storage size in bytes for one account.
     pub account_storage_usage: StorageUsage,
@@ -266,6 +296,23 @@ pub struct Art {
 impl Default for Art {
     fn default() -> Self {
         panic!("Fun token should be initialized before usage")
+    }
+}
+
+impl ArtV4 {
+    pub fn from_art(art: Art) -> Self {
+        ArtV4 {
+            accounts: art.accounts,
+            asset_prices: art.asset_prices,
+            total_supply: art.total_supply,
+            price: art.price,
+            owner: art.owner,
+            ausd_token: art.ausd_token,
+            total_staked: art.total_staked,
+            reward_paid_at: art.reward_paid_at,
+            staking_reward_enabled_at: art.staking_reward_enabled_at,
+            account_storage_usage: 0,
+        }
     }
 }
 
@@ -284,21 +331,20 @@ impl Art {
             total_staked: 0,
             reward_paid_at: UnorderedMap::new(b"d".to_vec()),
             staking_reward_enabled_at: env::block_timestamp(),
-            account_storage_usage: 0,
         };
         let mut account = ft.get_account(&owner_id);
         account.balance = total_supply;
         ft.accounts.insert(&owner_id, &account);
-        ft.measure_account_storage_usage();
+        // ft.measure_account_storage_usage();
         ft
     }
 
-    fn measure_account_storage_usage(&mut self) {
-        let initial_storage_usage = env::storage_usage();
-        let tmp_account_id = "a".repeat(64);
-        self.accounts.insert(&tmp_account_id, &Default::default());
-        self.account_storage_usage = env::storage_usage() - initial_storage_usage;
-        self.accounts.remove(&tmp_account_id);
+    pub fn migrate_to_v4(self) {
+        if env::predecessor_account_id() != self.owner {
+            env::panic(b"Only owner can upgrade");
+        }
+        let v4 = ArtV4::from_art(self);
+        env::state_write(&v4);
     }
 
     pub fn refresh_reward(&mut self) -> bool {
@@ -892,8 +938,7 @@ impl StorageManagement for Art {
     }
 
     fn storage_balance_bounds(&self) -> StorageBalanceBounds {
-        let required_storage_balance =
-            Balance::from(self.account_storage_usage) * env::storage_byte_cost();
+        let required_storage_balance = Balance::from(U128(0)) * env::storage_byte_cost();
         StorageBalanceBounds {
             min: required_storage_balance.into(),
             max: Some(required_storage_balance.into()),
