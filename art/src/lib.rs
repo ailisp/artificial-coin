@@ -1064,6 +1064,9 @@ impl FungibleTokenCore for Art {
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg(test)]
 mod tests {
+    use std::convert::TryInto;
+
+    use near_sdk::env::STORAGE_PRICE_PER_BYTE;
     use near_sdk::MockedBlockchain;
     use near_sdk::{testing_env, VMContext};
 
@@ -1188,5 +1191,40 @@ mod tests {
             contract.get_allowance(carol(), bob()),
             format!("{}", allowance - transfer_amount)
         );
+    }
+
+    // Fungible Token Standard tests
+
+    #[test]
+    fn test_ft_transfer() {
+        let mut context = get_context(carol());
+        testing_env!(context.clone());
+        let total_supply = 1_000_000_000_000_000u128;
+        let mut contract = Art::new(carol(), total_supply.to_string(), "ausd".to_string());
+        context.storage_usage = env::storage_usage();
+        context.attached_deposit = 1000 * STORAGE_PRICE_PER_BYTE;
+        testing_env!(context.clone());
+        contract.storage_deposit(Some(bob().try_into().unwrap()), None);
+
+        context.storage_usage = env::storage_usage();
+        context.attached_deposit = 1;
+        testing_env!(context.clone());
+        let transfer_amount = total_supply / 3;
+        contract.ft_transfer(bob().try_into().unwrap(), transfer_amount.into(), None);
+        context.storage_usage = env::storage_usage();
+        context.account_balance = env::account_balance();
+
+        context.is_view = true;
+        context.attached_deposit = 0;
+        testing_env!(context.clone());
+        assert_eq!(
+            contract.ft_balance_of(carol().try_into().unwrap()).0,
+            (total_supply - transfer_amount)
+        );
+        assert_eq!(
+            contract.ft_balance_of(bob().try_into().unwrap()).0,
+            transfer_amount
+        );
+        assert_eq!(contract.ft_total_supply().0, total_supply);
     }
 }
