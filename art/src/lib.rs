@@ -12,7 +12,7 @@ use near_sdk::{
     json_types::{ValidAccountId, U128},
     Gas, StorageUsage,
 };
-use near_sdk::{env, ext_contract, log, near_bindgen, AccountId, Balance, Promise, PromiseOrValue};
+use near_sdk::{env, ext_contract, log, near_bindgen, AccountId, Balance, Promise, PromiseOrValue, PromiseResult};
 use num_bigint::BigInt;
 use num_rational::Ratio;
 use num_traits::cast::ToPrimitive;
@@ -779,16 +779,6 @@ impl Art {
     }
 }
 
-#[ext_contract(ext_self)]
-trait FungibleTokenResolver {
-    fn ft_resolve_transfer(
-        &mut self,
-        sender_id: AccountId,
-        receiver_id: AccountId,
-        amount: U128,
-    ) -> U128;
-}
-
 #[ext_contract(ext_fungible_token_receiver)]
 pub trait FungibleTokenReceiver {
     fn ft_on_transfer(
@@ -1070,6 +1060,83 @@ impl FungibleTokenCore for Art {
             .unwrap_or(Default::default())
             .balance
             .into()
+    }
+}
+
+#[ext_contract(ext_self)]
+trait FungibleTokenResolver {
+    fn ft_resolve_transfer(
+        &mut self,
+        sender_id: AccountId,
+        receiver_id: AccountId,
+        amount: U128,
+    ) -> U128;
+}
+
+trait FungibleTokenResolver {
+    fn ft_resolve_transfer(
+        &mut self,
+        sender_id: AccountId,
+        receiver_id: AccountId,
+        amount: U128,
+    ) -> U128;
+}
+
+pub(crate) fn assert_self() {
+    assert_eq!(
+        env::predecessor_account_id(),
+        env::current_account_id(),
+        "Method is private"
+    );
+}
+
+#[near_bindgen]
+impl FungibleTokenResolver for Art {
+    fn ft_resolve_transfer(
+        &mut self,
+        sender_id: AccountId,
+        receiver_id: AccountId,
+        amount: U128,
+    ) -> U128 {
+        assert_self();
+        let amount: Balance = amount.into();
+
+        // Get the unused amount from the `ft_on_transfer` call result.
+        let unused_amount = match env::promise_result(0) {
+            PromiseResult::NotReady => unreachable!(),
+            PromiseResult::Successful(value) => {
+                if let Ok(unused_amount) = near_sdk::serde_json::from_slice::<U128>(&value) {
+                    std::cmp::min(amount, unused_amount.0)
+                } else {
+                    amount
+                }
+            }
+            PromiseResult::Failed => amount,
+        };
+
+        if unused_amount > 0 {
+            let mut receiver = self.get_account(&receiver_id);
+            let receiver_balance = receiver.balance;
+            if receiver_balance > 0 {
+                let refund_amount = std::cmp::min(receiver_balance, unused_amount);
+                receiver.balance -= refund_amount;
+                self.accounts.insert(&receiver_id, &receiver);
+
+                let mut sender = self.get_account(&sender_id);
+                sender.balance += refund_amount;
+                self.accounts.insert(&sender_id, &sender);
+
+                env::log(
+                    format!(
+                        "Refund {} from {} to {}",
+                        refund_amount, receiver_id, sender_id
+                    )
+                    .as_bytes(),
+                );
+                return (amount - refund_amount).into();
+            }
+        }
+        amount.into()
     }
 }
 
